@@ -146,7 +146,11 @@
 							</div>
 							<div class="col-3">
 								<div class="dropdown calendar-dropdown my-3">
-									<label for="futuresMonthSelector" class="form-label">Futures Month<span class="required-asterisk required-asterisk-hidden" id="req_futures_month">*</span></label>
+									<label for="futuresMonthSelector" class="form-label d-flex justify-content-between align-items-center">
+										<span>Futures Month<span class="required-asterisk required-asterisk-hidden" id="req_futures_month">*</span></span>
+										<small><a href="#" id="futures_month_dev_note" class="text-muted" style="font-size:0.75rem;">Dev note</a></small>
+									</label>
+									<span id="futures_month_dev_note_msg" class="d-block" style="font-size:0.75rem;display:none;"></span>
 									<button class="btn btn-outline-secondary dropdown-toggle d-flex align-items-center gap-2" type="button" data-bs-toggle="dropdown" id="futuresMonthSelector">
 										<span class="placeholder">-Select-</span>
 									</button>
@@ -191,6 +195,7 @@
 									<div class="futures-price-notes">
 										<div class="sm_txt" id="futures_price_as_of"></div>
 									</div>
+									<small class="form-text text-muted d-block" id="futures_price_roll_detail" style="display:none;font-size:0.75rem;"></small>
 								</div>
 							</div>
 							<div class="col hideByDefault" id="carry_elem">
@@ -203,7 +208,7 @@
 										<span class="input-group-text">$</span>
 										<input type="number" class="form-control dec4" id="carry" min="0" step=".01" placeholder="0.0000" autocomplete="off" />
 									</div>
-									<div class="futures-price-original-txt" id="futures_price_original_txt"></div>
+									<small class="form-text text-muted d-block" id="carry_roll_detail" style="display:none;font-size:0.75rem;"></small>
 								</div>
 							</div>
 							<div class="col hideByDefault" id="basis_price_elem">
@@ -232,6 +237,7 @@
 										<span class="input-group-text">$</span>
 										<input type="number" class="form-control dec4 uneditable-input" id="cash_price" min="0" step=".01" placeholder="0.0000" autocomplete="off" readonly />
 									</div>
+									<small class="form-text text-muted d-block" id="cash_price_hta_roll_detail" style="display:none;font-size:0.75rem;"></small>
 								</div>
 							</div>
 						</div>

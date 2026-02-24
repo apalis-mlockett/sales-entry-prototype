@@ -1,0 +1,189 @@
+[
+  {
+    "date": "2026-06-01",
+    "crop": "CORN",
+    "specific_commodity": "NORMAL",
+    "futures_month": "2026-03-01",
+    "open": "4.5576",
+    "high": "4.5576",
+    "low": "4.5201",
+    "last": "4.5251",
+    "commodity_code": "ZC"
+  },
+  {
+    "date": "2026-06-01",
+    "crop": "CORN",
+    "specific_commodity": "NORMAL",
+    "futures_month": "2026-05-01",
+    "open": "4.5187",
+    "high": "4.5212",
+    "low": "4.4787",
+    "last": "4.4887",
+    "commodity_code": "ZC"
+  },
+  {
+    "date": "2026-06-01",
+    "crop": "CORN",
+    "specific_commodity": "NORMAL",
+    "futures_month": "2026-07-01",
+    "open": "4.6531",
+    "high": "4.6556",
+    "low": "4.6131",
+    "last": "4.6256",
+    "commodity_code": "ZC"
+  },
+  {
+    "date": "2026-06-01",
+    "crop": "CORN",
+    "specific_commodity": "NORMAL",
+    "futures_month": "2026-09-01",
+    "open": "4.4872",
+    "high": "4.4947",
+    "low": "4.4547",
+    "last": "4.4697",
+    "commodity_code": "ZC"
+  },
+  {
+    "date": "2026-06-01",
+    "crop": "CORN",
+    "specific_commodity": "NORMAL",
+    "futures_month": "2026-12-01",
+    "open": "4.6465",
+    "high": "4.6515",
+    "low": "4.6140",
+    "last": "4.6290",
+    "commodity_code": "ZC"
+  },
+  {
+    "date": "2026-06-01",
+    "crop": "CORN",
+    "specific_commodity": "NORMAL",
+    "futures_month": "2027-03-01",
+    "open": "4.7955",
+    "high": "4.7980",
+    "low": "4.7655",
+    "last": "4.7780",
+    "commodity_code": "ZC"
+  },
+  {
+    "date": "2026-06-01",
+    "crop": "CORN",
+    "specific_commodity": "NORMAL",
+    "futures_month": "2027-05-01",
+    "open": "4.8685",
+    "high": "4.8685",
+    "low": "4.8410",
+    "last": "4.8510",
+    "commodity_code": "ZC"
+  },
+  {
+    "date": "2026-06-01",
+    "crop": "CORN",
+    "specific_commodity": "NORMAL",
+    "futures_month": "2027-07-01",
+    "open": "4.9313",
+    "high": "4.9313",
+    "low": "4.9163",
+    "last": "4.9238",
+    "commodity_code": "ZC"
+  },
+  {
+    "date": "2026-06-01",
+    "crop": "CORN",
+    "specific_commodity": "NORMAL",
+    "futures_month": "2027-09-01",
+    "open": "4.6488",
+    "high": "4.6488",
+    "low": "4.6488",
+    "last": "4.6488",
+    "commodity_code": "ZC"
+  },
+  {
+    "date": "2026-06-01",
+    "crop": "CORN",
+    "specific_commodity": "NORMAL",
+    "futures_month": "2027-12-01",
+    "open": "4.8306",
+    "high": "4.8306",
+    "low": "4.8156",
+    "last": "4.8181",
+    "commodity_code": "ZC"
+  },
+  {
+    "date": "2026-06-01",
+    "crop": "CORN",
+    "specific_commodity": "NORMAL",
+    "futures_month": "2028-03-01",
+    "open": "4.8871",
+    "high": "4.8871",
+    "low": "4.8871",
+    "last": "4.8871",
+    "commodity_code": "ZC"
+  },
+  {
+    "date": "2026-06-01",
+    "crop": "CORN",
+    "specific_commodity": "NORMAL",
+    "futures_month": "2028-05-01",
+    "open": "4.8488",
+    "high": "4.8488",
+    "low": "4.8488",
+    "last": "4.8488",
+    "commodity_code": "ZC"
+  },
+  {
+    "date": "2026-06-01",
+    "crop": "CORN",
+    "specific_commodity": "NORMAL",
+    "futures_month": "2028-07-01",
+    "open": "4.9403",
+    "high": "4.9403",
+    "low": "4.9403",
+    "last": "4.9403",
+    "commodity_code": "ZC"
+  },
+  {
+    "date": "2026-06-01",
+    "crop": "CORN",
+    "specific_commodity": "NORMAL",
+    "futures_month": "2028-09-01",
+    "open": "4.7294",
+    "high": "4.7294",
+    "low": "4.7294",
+    "last": "4.7294",
+    "commodity_code": "ZC"
+  },
+  {
+    "date": "2026-06-01",
+    "crop": "CORN",
+    "specific_commodity": "NORMAL",
+    "futures_month": "2028-12-01",
+    "open": "4.6835",
+    "high": "4.6835",
+    "low": "4.6835",
+    "last": "4.6835",
+    "commodity_code": "ZC"
+  },
+  {
+    "date": "2026-06-01",
+    "crop": "CORN",
+    "specific_commodity": "NORMAL",
+    "futures_month": "2029-07-01",
+    "open": "4.9496",
+    "high": "4.9496",
+    "low": "4.9496",
+    "last": "4.9496",
+    "commodity_code": "ZC"
+  },
+  {
+    "date": "2026-06-01",
+    "crop": "CORN",
+    "specific_commodity": "NORMAL",
+    "futures_month": "2029-12-01",
+    "open": "4.6780",
+    "high": "4.6780",
+    "low": "4.6780",
+    "last": "4.6780",
+    "commodity_code": "ZC"
+  }
+]

@@ -170,7 +170,7 @@ function openActionModal(actionType, record, splitQuantity = null) {
 	} else {
 		$('#splitRollBtn').removeClass('hideByDefault').text('Roll');
 	}
-	setActionLabels(actionType === 'Set' ? 'Delivery Date' : 'Roll Date', `${origin.sale_type} Delivery Location`);
+	setActionLabels(actionType === 'Set' ? 'Set Date' : 'Roll Date', `${origin.sale_type} Delivery Location`);
 
 	// Populate shared fields (Set: Delivery Date null; Roll: Roll Date null)
 	$('#sale_date').val((actionType === 'Set' || actionType === 'Roll') ? '' : moment().format('YYYY-MM-DD'));
@@ -189,11 +189,18 @@ function openActionModal(actionType, record, splitQuantity = null) {
 	}
 	$('#quantity').val((splitQuantity || record.quantity) != null ? formatSetQuantity(parseInt(splitQuantity || record.quantity, 10)) : '');
 	$('#comments').val('');
-	$('#futures_month').val(record.futures_month ? record.futures_month.slice(0, 7) : '');
-	if (record.futures_month) {
-		$('#futuresMonthSelector').html(`<span>${formatMonth(record.futures_month)}</span>`);
+	if (actionType === 'Roll') {
+		$('#futures_month').val('');
+		$('#futuresMonthSelector').html('<span class="placeholder">-Select-</span>');
+		$('#futures_price').val('');
+		$('#carry').val('');
+	} else {
+		$('#futures_month').val(record.futures_month ? record.futures_month.slice(0, 7) : '');
+		if (record.futures_month) {
+			$('#futuresMonthSelector').html(`<span>${formatMonth(record.futures_month)}</span>`);
+		}
+		$('#futures_price').val(record.futures_price !== null && record.futures_price !== undefined ? record.futures_price.toFixed(4) : '');
 	}
-	$('#futures_price').val(record.futures_price !== null && record.futures_price !== undefined ? record.futures_price.toFixed(4) : '');
 	$('#basis_price').val(record.basis_price !== null && record.basis_price !== undefined ? record.basis_price.toFixed(4) : '');
 	$('#service_fee').val(''); // Set/Roll form: always reset to null
 	$('#delivery_location').val(record.delivery_location || '');
@@ -270,31 +277,40 @@ function openActionModal(actionType, record, splitQuantity = null) {
 	$('#futures_price, #basis_price, #service_fee, #carry').trigger('input');
 
 	if (actionType === 'Roll') {
-		const origMonth = record.futures_month ? formatMonth(record.futures_month) : '--';
-		const origPrice = (record.futures_price != null && record.futures_price !== '') ? formatPrice(record.futures_price) : '--';
-		$('#futures_price_original_txt').text(`Orig. Futures Price for ${origMonth}: ${origPrice}`).show();
 		$('#salesModal').one('shown.bs.modal', function() {
-			populatFutureSelection().then(applyRollFuturesMonthRestrictions);
+			populatFutureSelection(true).then(function() {
+				applyRollFuturesMonthRestrictions();
+				updateRollFormDetailText();
+			});
 		});
 	} else {
-		$('#futures_price_original_txt').text('').hide();
+		$('#futures_price_roll_detail').hide().text('');
+		$('#carry_roll_detail').hide().text('');
+		$('#cash_price_hta_roll_detail').hide().text('');
 	}
 
 	$('#salesModal').modal('show');
 }
 
 function applyRollFuturesMonthRestrictions() {
-	if (currentActionStatus !== 'Rolled' || !currentActionRecord || !currentActionRecord.futures_month) {
+	if (currentActionStatus !== 'Rolled' || !currentActionRecord) {
 		$('#futures_month_options li').removeClass('futures-month-disabled');
 		return;
 	}
-	const recordMonth = (currentActionRecord.futures_month || '').slice(0, 7);
+	const origin = getOriginRecord(currentActionRecord);
+	const recordMonth = (currentActionRecord.futures_month || '').toString().slice(0, 7);
+	const originMonth = (origin && origin.futures_month) ? (origin.futures_month || '').toString().slice(0, 7) : '';
+	const cutoffMonth = (recordMonth && originMonth) ? (recordMonth >= originMonth ? recordMonth : originMonth) : (recordMonth || originMonth);
+	if (!cutoffMonth) {
+		$('#futures_month_options li').removeClass('futures-month-disabled');
+		return;
+	}
 	$('#futures_month_options li').each(function() {
-		const optionMonth = $(this).attr('data-futures-month') || $(this).data('futures_month') || '';
-		if (optionMonth && optionMonth <= recordMonth) {
-			$(this).addClass('futures-month-disabled');
+		const optionMonth = (getFuturesMonthValue($(this)) || '').toString().slice(0, 7);
+		if (optionMonth && optionMonth <= cutoffMonth) {
+			$(this).addClass('futures-month-disabled').attr('aria-disabled', 'true');
 		} else {
-			$(this).removeClass('futures-month-disabled');
+			$(this).removeClass('futures-month-disabled').removeAttr('aria-disabled');
 		}
 	});
 }
@@ -619,7 +635,7 @@ const saveSale = async function(){
 			const recordDate = moment(currentActionRecord.sale_date).startOf('day');
 			const selectedDate = moment(sale_date).startOf('day');
 			if (selectedDate.isBefore(recordDate)) {
-				errors.push({err:'Delivery Date must be on or after the tracking record Sale Date.', elem: $saleDate, field: 'sale_date'});
+				errors.push({err:'Set Date must be on or after the tracking record Sale Date.', elem: $saleDate, field: 'sale_date'});
 			}
 		}
 	}
@@ -841,23 +857,11 @@ $(document).ready(function() {
 		if (!isNaN(v)) this.value = v.toFixed(4);
 	});
 
-	// Calculate Cash Price: futures_price + basis_price - service_fee
-	function calculateCashPrice() {
-	let futuresPrice = parseFloat($('#futures_price').val());
-	if (Number.isNaN(futuresPrice)) {
-		const referencePrice = parseFloat($('#futures_price_reference').val());
-		futuresPrice = Number.isNaN(referencePrice) ? 0 : referencePrice;
-	}
-		const basisPrice = parseFloat($('#basis_price').val()) || 0;
-		const serviceFee = parseFloat($('#service_fee').val()) || 0;
-		const carryPrice = parseFloat($('#carry').val()) || 0;
-		
-		const cashPrice = futuresPrice + basisPrice + carryPrice - serviceFee;
-		$('#cash_price').val(cashPrice.toFixed(4));
-	}
-
 	// Update cash price when any of the component fields change
-	$('#futures_price, #futures_price_reference, #basis_price, #service_fee, #carry').on('input change blur', calculateCashPrice);
+	$('#futures_price, #futures_price_reference, #basis_price, #service_fee, #carry').on('input change blur', function() {
+		calculateCashPrice();
+		if (currentActionStatus === 'Rolled') updateRollFormDetailText();
+	});
 
   	window.sales_date_picker = new tempusDominus.TempusDominus($('#sale_date_select')[0], {
 		display: {
@@ -1179,6 +1183,18 @@ $(document).ready(function() {
 		}
 	});
 
+	// Dev note: show API message in DOM (alert doesn't work in Cursor IDE)
+	$(document).on('click', '#futures_month_dev_note', function(e) {
+		e.preventDefault();
+		const $msg = $('#futures_month_dev_note_msg');
+		const text = 'Will use API: /api/external/market/futures/crop/[CROP]/daily';
+		if ($msg.hasClass('dev-note-visible')) {
+			$msg.removeClass('dev-note-visible').text('').hide();
+		} else {
+			$msg.text(text).addClass('dev-note-visible').show();
+		}
+	});
+
 	// Handle futures month selections (event delegation for dynamic options)
 	$(document).on('click', '#futures_month_options li, #nearby_futures_month_options li', function(e) {
 		e.preventDefault();
@@ -1208,22 +1224,32 @@ $(document).ready(function() {
 					}
 					// Roll (HTA or Basis): auto-populate Carry = New Futures Price - Origin Futures Price
 					if (currentActionStatus === 'Rolled' && currentActionRecord) {
-						const origin = getOriginRecord(currentActionRecord);
-						const originFuturesPrice = origin && origin.futures_price != null && origin.futures_price !== ''
-							? parseFloat(origin.futures_price)
-							: NaN;
-						if (!Number.isNaN(originFuturesPrice)) {
-							const carry = priceValue - originFuturesPrice;
+						// Carry = Current price for Roll Month - Current price for Original Month (both from future-daily-futures.json)
+						const origMonthKey = (currentActionRecord.futures_month || '').slice(0, 7);
+						const rollMonthKey = (futuresMonth || '').slice(0, 7);
+						const origData = futureFuturesDataByMonth[origMonthKey];
+						const rollMonthPrice = Number.isNaN(parseFloat(futuresPrice)) ? 0 : parseFloat(futuresPrice);
+						const origMonthPrice = origData && origData.last != null ? parseFloat(origData.last) : NaN;
+						if (!Number.isNaN(origMonthPrice)) {
+							const carry = rollMonthPrice - origMonthPrice;
 							$('#carry').val(carry.toFixed(4));
 						}
+						updateRollFormDetailText();
 					}
 				}
 			}
-			if (smTxt) {
-				$('#futures_price_as_of').html('As of ' + moment(smTxt).subtract(1, 'day').format('MMM DD, YYYY'));
+			if (smTxt || futuresMonth) {
+				const saleType = $('#sale_type').val();
+				if (saleType === 'HTA') {
+					$('#futures_price_as_of').empty();
+				} else {
+					const monthFmt = futuresMonth ? formatMonth(futuresMonth) : '--';
+					const priceFmt = (futuresPrice != null && futuresPrice !== '') ? formatPrice(futuresPrice) : '--';
+					$('#futures_price_as_of').html(`Current ${monthFmt}: ${priceFmt}`);
+				}
 			}
 			$('#futuresMonthSelector').html($a.html());
-			// Trigger cash price calculation
+			updateRollFormDetailText();
 			$('#futures_price').trigger('input');
 			$('#carry').trigger('input');
 		}
@@ -1373,6 +1399,7 @@ function checkSalesType(){
 	
 	if (saleType == '') {
 		$('.hideByDefault').removeClass('_show');
+		$('#cash_price_hta_roll_detail, #futures_price_roll_detail, #carry_roll_detail').hide().text('');
 		updateMerchGainTip();
 		if ($deliveryLocationLabel.length) {
 			$deliveryLocationLabel.contents().first()[0].textContent = 'Delivery Location';
@@ -1442,6 +1469,10 @@ function checkSalesType(){
 			$('#req_quantity').removeClass('required-asterisk-hidden');
 			$('#req_futures_price').removeClass('required-asterisk-hidden');
 			$('#req_hta_contract_holder').removeClass('required-asterisk-hidden');
+			// On HTA form load (Add Sale), auto-select Dec 2026
+			if (!$('#sale_id').val() && !currentActionStatus && !$('#futures_month').val()) {
+				selectDefaultHtaFuturesMonth();
+			}
 		}
 		else {
 			$('#hta_contract_holder_elem').removeClass('_show');
@@ -1522,6 +1553,7 @@ function checkSalesType(){
 		else {
 			$('#basis_contract_holder_elem').removeClass('_show');
 		};
+		calculateCashPrice();
 	}
 };
 
@@ -1535,9 +1567,10 @@ const tabledata = [
 
 // Store futures data globally for lookup
 let futuresDataByMonth = {};
+let futureFuturesDataByMonth = {}; // Roll form: prices as of "roll date" from future-daily-futures.json
 
-const populatFutureSelection = async function() {
-	const fdata = await getDailyFuturesForToday();
+const populatFutureSelection = async function(useFutureFile = false) {
+	const fdata = useFutureFile ? await getFutureDailyFuturesForRoll() : await getDailyFuturesForToday();
 	//console.log(fdata);
 	const fMonths = {};
 	for (var i = 0; i < fdata.length; i++) {
@@ -1551,10 +1584,18 @@ const populatFutureSelection = async function() {
 	}
 
 	// Store futures data by month (YYYY-MM format) for lookup
-	futuresDataByMonth = {};
-	for (let key in fMonths) {
-		const monthKey = fMonths[key].futures_month.slice(0,7); // YYYY-MM
-		futuresDataByMonth[monthKey] = fMonths[key];
+	if (useFutureFile) {
+		futureFuturesDataByMonth = {};
+		for (let key in fMonths) {
+			const monthKey = fMonths[key].futures_month.slice(0,7);
+			futureFuturesDataByMonth[monthKey] = fMonths[key];
+		}
+	} else {
+		futuresDataByMonth = {};
+		for (let key in fMonths) {
+			const monthKey = fMonths[key].futures_month.slice(0,7);
+			futuresDataByMonth[monthKey] = fMonths[key];
+		}
 	}
 
 	const futures_month_options = $('#futures_month_options');
@@ -1615,28 +1656,107 @@ const populatFutureSelection = async function() {
 	sortFuturesMonthOptions(nearby_futures_month_options);
 };
 
+function selectDefaultHtaFuturesMonth() {
+	const dec2026 = $('#futures_month_options li').filter(function() {
+		const m = $(this).attr('data-futures-month') || $(this).data('futures_month') || '';
+		return m.startsWith('2026-12');
+	}).first();
+	if (dec2026.length && !dec2026.hasClass('futures-month-disabled')) {
+		const futuresMonth = dec2026.attr('data-futures-month') || dec2026.data('futures_month');
+		const futuresPrice = dec2026.attr('data-futures-price') ?? dec2026.data('futures_price');
+		const $a = dec2026.find('a');
+		$('#futures_month').val(futuresMonth);
+		if (futuresPrice != null && futuresPrice !== '') {
+			const priceValue = parseFloat(futuresPrice);
+			if (!Number.isNaN(priceValue)) {
+				$('#futures_price').val(priceValue.toFixed(4));
+				$('#futures_price_reference').val(priceValue.toFixed(4));
+			}
+		}
+		$('#futuresMonthSelector').html($a.html());
+		$('#futures_price_as_of').empty();
+		$('#futures_price').trigger('input');
+	}
+}
+
 function clearAsOf(e){
 	$('#'+e).empty();
 }
 
 function getDailyFuturesForToday() {
-	// API: /api/external/market/futures/crop/[CROP]/daily
 	return new Promise((resolve, reject) => {
-		setTimeout(() => { // simulate an API delay for response
+		setTimeout(() => {
 			fetch('./assets/daily-futures.json')
 				.then((response) => {
-					if (!response.ok) {
-						throw new Error('Failed to load futures data');
-					}
+					if (!response.ok) throw new Error('Failed to load futures data');
 					return response.json();
 				})
 				.then((data) => resolve(data))
-				.catch((error) => {
-					console.error(error);
-					resolve([]);
-				});
+				.catch((error) => { console.error(error); resolve([]); });
 		}, 300);
 	});
+}
+
+function getFutureDailyFuturesForRoll() {
+	return new Promise((resolve, reject) => {
+		setTimeout(() => {
+			fetch('./assets/future-daily-futures.json')
+				.then((response) => {
+					if (!response.ok) throw new Error('Failed to load future futures data');
+					return response.json();
+				})
+				.then((data) => resolve(data))
+				.catch((error) => { console.error(error); resolve([]); });
+		}, 300);
+	});
+}
+
+function updateRollFormDetailText() {
+	const isRoll = currentActionStatus === 'Rolled' && currentActionRecord;
+	const saleType = $('#sale_type').val();
+	const isHtaRoll = isRoll && saleType === 'HTA';
+	if (!isRoll) {
+		$('#futures_price_roll_detail, #carry_roll_detail').hide().text('');
+		return;
+	}
+	const origMonthKey = (currentActionRecord.futures_month || '').slice(0, 7);
+	const rollMonthKey = ($('#futures_month').val() || '').slice(0, 7);
+	const origMonthFmt = origMonthKey ? formatMonth(currentActionRecord.futures_month) : '--';
+	const rollMonthFmt = rollMonthKey ? formatMonth($('#futures_month').val()) : '--';
+	const origPrice = (currentActionRecord.futures_price != null && currentActionRecord.futures_price !== '') ? formatPrice(currentActionRecord.futures_price) : '--';
+	const origData = futureFuturesDataByMonth[origMonthKey];
+	const rollData = rollMonthKey ? futureFuturesDataByMonth[rollMonthKey] : null;
+	const currentOrigPrice = origData && origData.last != null ? formatPrice(origData.last) : '--';
+	const currentRollPrice = rollData && rollData.last != null ? formatPrice(rollData.last) : '--';
+	const carryVal = parseFloat($('#carry').val()) || 0;
+	const carryTxt = formatPrice(carryVal);
+
+	const fpLines = [
+		`Original ${origMonthFmt}: ${origPrice}`,
+		`Current ${origMonthFmt}: ${currentOrigPrice}`,
+		(rollMonthKey && rollMonthKey > origMonthKey) ? `Current ${rollMonthFmt}: ${currentRollPrice}` : null
+	].filter(Boolean);
+	$('#futures_price_roll_detail').html(fpLines.join('<br>')).show();
+
+	if (rollMonthKey && origData && rollData) {
+		$('#carry_roll_detail').html(
+			'<div class="roll-math-vertical">' +
+			`<div class="roll-math-line"><span class="roll-math-op"></span><span class="roll-math-val">${currentRollPrice}</span> (Current ${rollMonthFmt})</div>` +
+			`<div class="roll-math-line"><span class="roll-math-op">−</span><span class="roll-math-val">${currentOrigPrice}</span> (Current ${origMonthFmt})</div>` +
+			'</div>'
+		).show();
+	} else {
+		$('#carry_roll_detail').hide().text('');
+	}
+
+	if (isHtaRoll) {
+		$('#cash_price_hta_roll_detail').html(
+			'<div class="roll-math-vertical">' +
+			`<div class="roll-math-line"><span class="roll-math-op"></span><span class="roll-math-val">${origPrice}</span> (Orig. ${origMonthFmt})</div>` +
+			`<div class="roll-math-line"><span class="roll-math-op">+</span><span class="roll-math-val">${carryTxt}</span> (Carry)</div>` +
+			'</div>'
+		).show();
+	}
 }
 
 function tableTipCloseCaptureHandler(e) {
@@ -1716,6 +1836,34 @@ function formatPrice(price) {
 	return '$' + parseFloat(price).toFixed(4);
 }
 
+function calculateCashPrice() {
+	let futuresPrice;
+	const saleType = $('#sale_type').val();
+	const isHtaRoll = currentActionStatus === 'Rolled' && saleType === 'HTA' && currentActionRecord;
+	if (isHtaRoll) {
+		futuresPrice = parseFloat(currentActionRecord.futures_price);
+		if (Number.isNaN(futuresPrice)) futuresPrice = 0;
+	} else {
+		futuresPrice = parseFloat($('#futures_price').val());
+		if (Number.isNaN(futuresPrice)) {
+			const referencePrice = parseFloat($('#futures_price_reference').val());
+			futuresPrice = Number.isNaN(referencePrice) ? 0 : referencePrice;
+		}
+	}
+	const basisPrice = parseFloat($('#basis_price').val()) || 0;
+	const serviceFee = parseFloat($('#service_fee').val()) || 0;
+	const carryPrice = parseFloat($('#carry').val()) || 0;
+	const cashPrice = futuresPrice + basisPrice + carryPrice - serviceFee;
+	$('#cash_price').val(cashPrice.toFixed(4));
+	const $detail = $('#cash_price_hta_roll_detail');
+	if (isHtaRoll && $detail.length) {
+		// Cash Price detail is updated by updateRollFormDetailText (vertical format)
+		$detail.show();
+	} else if ($detail.length) {
+		$detail.hide().empty();
+	}
+}
+
 function formatQuantity(quantity) {
 	if (!quantity) return '--';
 	return quantity.toLocaleString() + ' bu.';
@@ -1728,7 +1876,7 @@ function formatMerchValueDriver(val) {
 	if (Number.isNaN(num)) return null;
 	const txt = num < 0 ? `(${formatPrice(Math.abs(val))})` : formatPrice(val);
 	const color = num < 0 ? '#ff7474' : '#77ff76';
-	return { txt, color };
+	return { txt, color, val: num };
 }
 
 /** Build HTML table for Merch Value tip: Date, Action, Performance Driver, Value / bu., ordered by date, action, driver. */
@@ -1776,25 +1924,27 @@ function buildMerchValueBreakdownHtml(saleId) {
 		}
 		// Sort drivers by driverOrder
 		drivers.sort((a, b) => driverOrder.indexOf(a.name) - driverOrder.indexOf(b.name));
-		const qty = (rec.quantity != null && rec.quantity !== '') ? (parseInt(rec.quantity, 10) || 0).toLocaleString() : '--';
+		const recQty = (rec.quantity != null && rec.quantity !== '') ? (parseInt(rec.quantity, 10) || 0) : 0;
+		const originQty = (origin.quantity != null && origin.quantity !== '') ? (parseInt(origin.quantity, 10) || 0) : 0;
+		const qty = recQty > 0 ? recQty.toLocaleString() : '--';
 		const futMonth = rec.futures_month ? formatMonth(rec.futures_month) : '--';
-		drivers.forEach(d => rows.push({ date: dateStr, action, qty, futMonth, driver: d.name, txt: d.txt, color: d.color }));
+		const showPctBreakdown = originQty > 0 && recQty > 0 && recQty < originQty;
+		const pct = showPctBreakdown ? Math.round((recQty / originQty) * 100) : 0;
+		const weight = originQty > 0 && recQty > 0 ? recQty / originQty : 1;
+		drivers.forEach(d => {
+			let txt = d.txt;
+			let adjustedValForTotal = d.val;
+			if (showPctBreakdown && d.val != null && !Number.isNaN(d.val)) {
+				const adjustedVal = d.val * weight;
+				const adj = formatMerchValueDriver(adjustedVal);
+				txt = `<span style="text-decoration:line-through;color:${d.color}">${d.txt}</span> ${pct}%<br><span style="color:${adj ? adj.color : d.color}">${adj ? adj.txt : '--'}</span>`;
+				adjustedValForTotal = adjustedVal;
+			}
+			rows.push({ date: dateStr, action, qty, futMonth, driver: d.name, txt, color: d.color, adjustedVal: adjustedValForTotal });
+		});
 	});
-	// Recompute total from same formula as main table
-	totalMerchValue = allRecords.reduce((sum, record) => {
-		const merchGain = parseFloat(record.merch_gain);
-		const carry = parseFloat(record.carry);
-		const serviceFee = parseFloat(record.service_fee);
-		let net = (Number.isNaN(merchGain) ? 0 : merchGain) + (Number.isNaN(carry) ? 0 : carry) - (Number.isNaN(serviceFee) ? 0 : serviceFee);
-		const isSet = record.status === 'Set' || record.status === 'Updated';
-		const originRec = getOriginRecord(record);
-		if (isSet && originRec && (originRec.initial_basis_price != null && originRec.initial_basis_price !== '')) {
-			const setBasis = parseFloat(record.basis_price);
-			const initBasis = parseFloat(originRec.initial_basis_price);
-			if (!Number.isNaN(setBasis) && !Number.isNaN(initBasis)) net += (setBasis - initBasis);
-		}
-		return sum + net;
-	}, 0);
+	// Recompute total from adjusted values (weight by recQty/originQty when partial attribution)
+	totalMerchValue = rows.reduce((sum, r) => sum + (r.adjustedVal != null && !Number.isNaN(r.adjustedVal) ? r.adjustedVal : 0), 0);
 	const totalColor = totalMerchValue < 0 ? '#ff7474' : '#77ff76';
 	const totalTxt = formatPrice(totalMerchValue);
 	const rowHtml = rows.map(r => `<tr><td>${r.date}</td><td>${r.action}</td><td>${r.qty}</td><td>${r.futMonth}</td><td>${r.driver}</td><td style="text-align:right;color:${r.color}">${r.txt}</td></tr>`).join('');
@@ -2180,9 +2330,13 @@ const editSaleLedger = async function(id){
 							}
 						}
 						
-						// Set "as of" date
-						if (smTxt) {
-							$('#futures_price_as_of').html('As of ' + moment(smTxt).subtract(1, "day").format("MMM DD, YYYY"));
+						// Set futures price note
+						if (record.sale_type === 'HTA') {
+							$('#futures_price_as_of').empty();
+						} else if (record.sale_type !== 'HTA') {
+							const monthFmt = recordFuturesMonth ? formatMonth(record.futures_month) : '--';
+							const priceFmt = (record.futures_price != null && record.futures_price !== '') ? formatPrice(record.futures_price) : '--';
+							$('#futures_price_as_of').html(`Current ${monthFmt}: ${priceFmt}`);
 						}
 						
 						// Trigger cash price calculation
@@ -2235,9 +2389,13 @@ const editSaleLedger = async function(id){
 							$('#futures_price').val(record.futures_price.toFixed(4));
 						}
 						
-						// Set "as of" date
-						if (record.sale_date) {
-							$('#futures_price_as_of').html('As of ' + moment(record.sale_date).subtract(1, "day").format("MMM DD, YYYY"));
+						// Set futures price note
+						if (record.sale_type === 'HTA') {
+							$('#futures_price_as_of').empty();
+						} else if (record.sale_type !== 'HTA') {
+							const monthFmt = record.futures_month ? formatMonth(record.futures_month) : '--';
+							const priceFmt = (record.futures_price != null && record.futures_price !== '') ? formatPrice(record.futures_price) : '--';
+							$('#futures_price_as_of').html(`Current ${monthFmt}: ${priceFmt}`);
 						}
 						
 						// Trigger cash price calculation
@@ -2390,6 +2548,7 @@ function renderSalesTable() {
 			.reduce((sum, record) => sum + (parseInt(record.quantity || 0, 10) || 0), 0);
 		const remainingQuantity = getRemainingQuantity(originRecord);
 		const hasSetRecords = (originRecord.sale_type === 'Cash') || totalSetQuantity > 0;
+		const originQtyForMerch = parseInt(originRecord.quantity || 0, 10) || 0;
 		const merchValue = hasSetRecords ? allChildRecords.reduce((sum, record) => {
 			const merchGain = parseFloat(record.merch_gain);
 			const carry = parseFloat(record.carry);
@@ -2405,7 +2564,9 @@ function renderSalesTable() {
 					net += (setBasis - initBasis);
 				}
 			}
-			return sum + net;
+			const recQty = parseInt(record.quantity || 0, 10) || 0;
+			const weight = originQtyForMerch > 0 && recQty > 0 ? Math.min(1, recQty / originQtyForMerch) : 1;
+			return sum + (net * weight);
 		}, 0) : null;
 		
 		// Compute parent status per requirements
@@ -2562,9 +2723,6 @@ function renderSalesTable() {
 				(isTopLevelCopy && remainingQuantity > 0) ||
 				(!isTopLevelCopy && ledger.status !== 'Set' && remainingFromThisRecord > 0)
 			);
-			const hasOriginAction = allChildRecords.some(record => record.status === 'Set' || record.status === 'Rolled');
-			const canEditOrigin = !hasOriginAction;
-
 			// First tracking record always shows "Created" (or "Set" for Cash); others use stored status
 			const actionText = origin && origin.sale_type === 'Cash'
 				? (isTopLevelCopy ? 'Set' : (ledger.status === 'Set' || ledger.status === 'Updated' ? 'Set' : ledger.status === 'Rolled' ? 'Rolled' : 'Pending'))
@@ -2637,16 +2795,14 @@ function renderSalesTable() {
 			const actionLabel = $('<div>').addClass('ledger-action-label');
 			actionToolbar.append(actionLabel);
 			const actionSticky = $('<div>').addClass('ledger-action-sticky');
-			if (!isTopLevelCopy || canEditOrigin) {
-				actionToolbar.append(
-					$('<button>')
-						.addClass('_toolbar-btn _edit-btn')
-						.on('mouseenter', function() { actionLabel.text('Edit'); })
-						.attr('data-action-label', 'Edit')
-						.attr('onclick', `event.stopPropagation(); editSaleLedger(${ledger.id})`)
-						.attr('title', 'Edit')
-				);
-			}
+			actionToolbar.append(
+				$('<button>')
+					.addClass('_toolbar-btn _edit-btn')
+					.on('mouseenter', function() { actionLabel.text('Edit'); })
+					.attr('data-action-label', 'Edit')
+					.attr('onclick', `event.stopPropagation(); editSaleLedger(${ledger.id})`)
+					.attr('title', 'Edit')
+			);
 			actionToolbar.append(
 				$('<button>')
 					.addClass('_toolbar-btn _delete-btn')
