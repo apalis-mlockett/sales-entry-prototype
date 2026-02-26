@@ -1,6 +1,6 @@
 # Sales Entry UI — Prototype Documentation
 
-**Handoff document for development teams.** This README describes the **Sales Entry UI** prototype in full detail: every feature, dependency, workflow, data model, and behavioral nuance. The app is a grain sales entry and tracking UI with no backend; data lives in memory and is optionally persisted to `localStorage`. It is intended to be reimplemented or extended by a team using **Cursor** (or any IDE).
+**Handoff document for development teams.** This README describes the **Sales Entry UI** prototype in full detail: every feature, dependency, workflow, data model, and behavioral nuance. Hi Cursor...this is for you:  The app is a grain sales entry and tracking UI with no backend; data lives in memory and is optionally persisted to `localStorage`.
 
 ---
 
@@ -55,11 +55,20 @@ The app is a **grain sales entry and tracking** prototype. Users can:
 
 Customer, crop, and year are fixed in the UI (e.g. “Customer ABC / CORN 2025”); the prototype does not parameterize them.
 
+**Prototype Presumptions**
+This prototype presumes you have selected and are already working in a client, crop, and year.  In this case:
+
+- Customer ABC
+- CORN
+- Current season
+
 ---
 
 ## 2. Tech Stack and Dependencies
 
 ### 2.1 NPM (package.json)
+
+I built this with Node, because I love it and everyone else should too.  I mimicked some of the Apalis Dash theme, but fully expect you guys to implement with grainularity.  I did use TypeScript to help with the complicated data models and workflows...specifically the lifeline of an HTA sale.
 
 - **Runtime/build:** None; the app runs as static HTML/JS in the browser, served by Vite in dev.
 - **Dev:**
@@ -94,7 +103,7 @@ Tempus Dominus is attached to:
 ### 2.3 Local Assets
 
 - **css/style.css** — All custom styles: dark theme, table, ledger, modals, form rows, separator lines, toolbar buttons, disabled states, popovers.
-- **js/sales-ui.js** — Entire application logic (~3.3k lines): state, load/save, render, validation, event handlers, Cash Price and Merch Value calculations.
+- **js/sales-ui.js** — Entire application logic (~3.3k lines): state, load/save, render, validation, event handlers, Cash Price and Merch Value calculations.  I packed a lot into this, and didn't really take the time to split it out logically...sorry.
 
 ### 2.4 TypeScript Definitions (types/)
 
@@ -106,6 +115,8 @@ Used for editor/IDE support and `npm run typecheck`; the app is not compiled fro
 - **types/ui.d.ts** — `DeliveryLocationOption`, `ValidationError`, `ModalFormState`, `TableDataRow`.
 
 `tsconfig.json` targets ES2020, `allowJs: true`, `checkJs: false`, `typeRoots: ["./types"]`, `include: ["js/**/*.js", "types/**/*.d.ts"]`.
+
+PS, I didn't add any snobby Lint rules.
 
 ---
 
@@ -129,7 +140,7 @@ Sales-UI/
 ├── package.json
 ├── tsconfig.json
 ├── .gitignore              # node_modules/, package-lock.json
-└── README.md               # This file
+└── README.md               # This file (hello)
 ```
 
 - **index.html** — Page structure, table header, footer (Export/Import), Sales modal (form rows, split section, deduct section), Set Quantity modal, Delete confirmation modal. Form field IDs and `data-td-*` attributes for Tempus Dominus.
@@ -237,13 +248,11 @@ All children (and a copy of the origin for display) are sorted by `sale_date` (o
 
 ## 7. Inner Tracking Table (Ledger)
 
-Renders when a parent row is expanded. One row per “child” in the sorted list: **origin copy first**, then all other children by `sale_date`.
+Renders when a parent row is expanded. One row per “child” in the sorted list: **origin copy first**, then all other children by `sale_date`.  I call these tracking records "Record Sets", but you can call them wahtever.
 
 ### 7.1 Column Order
 
-Sale Date, Action, Quantity (bu.), Futures Month, Pending (bu.), Delivery Month, Futures Price, Merch Gain, Carry, Basis Price, **Storage/Interest**, Service Fee, Cash Price, Contract Holder, Delivery Location, Comments.
-
-- **Storage/Interest** is displayed before Service Fee. If value is null or 0, default cell color; if &gt; 0, red and value shown in parentheses to indicate loss (same convention as Service Fee).
+Sale Date, Action, Quantity (bu.), Futures Month, Pending (bu.), Delivery Month, Futures Price, Merch Gain, Carry, Basis Price, Storage/Interest, Service Fee, Cash Price, Contract Holder, Delivery Location, Comments.
 
 ### 7.2 Row Types and Action Label
 
@@ -255,7 +264,7 @@ Sale Date, Action, Quantity (bu.), Futures Month, Pending (bu.), Delivery Month,
 - For each row, **Pending (bu.)** = max bushels that can still be Set or Rolled from that row.
   - **Origin row:** If that row has Set/Roll actions available, value = **remaining quantity at origin**. Otherwise `"--"`.
   - **Non-origin row:** If that row has Set/Roll actions, value = **remaining from this record**. Otherwise `"--"`.
-- Rows that have Set/Roll actions get class `ledger-row-has-set-roll` and white text.
+- Rows that have Set/Roll actions get class `ledger-row-has-set-roll` and bold, white text to stand out / draw user's attention to tracking records that have pending bushel options to deal with.
 
 ### 7.4 Set and Roll Buttons
 
@@ -423,6 +432,8 @@ with the following nuances:
 - **Dev note link:** Next to the Futures Month label in the form, a “Dev note” link toggles a message in **#futures_month_dev_note_msg**. The message states: *“Will use API: [/api/external/market/futures/crop/[CROP]/daily] to pull accurate/current futures months/prices. For now, reading from spoofed .json flat files in ./assets/*”* (note: actual path in code is `./daily-futures/`; the dev note text still says ./assets/* for historical reference).
 - **JSON shape:** See **types/futures.d.ts** (`DailyFuturesRow`, `FuturesDataByMonth`). Expected fields include date, crop, futures_month, last (price), etc.
 
+Note: If there is load-time required for loading Future Month/Pricing from the API, please employ the use of loaders for the best UX, and to prevent a user from clicking something before it is fully loaded/ready/initialized.  The Futures Month in particular feeds down to Futures Price / Carry / Cash Price auto-calculations.
+
 ---
 
 ## 19. Date and Month Pickers
@@ -432,6 +443,12 @@ with the following nuances:
   - **Delivery Month:** Attached to `#delivery_month_select`; month-only view.
 - **Active picker:** Only one date/month picker is “active” at a time. When the sale date picker is shown, any other open picker (e.g. delivery month) is closed via a **show** event subscription. Subscriptions use **tempusDominus.Namespace.events.show** and **hide**.
 - **Validation:** When the user closes the Sale Date or Delivery Month picker after selecting a value, field validation is cleared for that field (so previous invalid state doesn’t persist).
+
+^^ but please use your own calendar component.  But it needs to support this functionality:
+
+- Unselectable dates
+- Auto-select dates
+- Easy date selection for past/future/present
 
 ---
 
@@ -490,3 +507,5 @@ npm run typecheck
 ---
 
 This README and the code together are intended to give our awesome development team full context to maintain, extend, or reimplement the Sales Entry UI prototype with their creative brilliance.
+
+Go forth, build.
