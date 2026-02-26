@@ -181,7 +181,7 @@ So: the first (Created) row can show Set/Roll until the origin is fully Set or R
   - **HTA:** Adds Comp. Fut. Month, Initial Basis Price; HTA Contract Holder; HTA Delivery Location (disabled); Delivery Month disabled.
   - **Basis:** Basis Contract Holder; Basis Delivery Location (disabled); Delivery Month, Futures Price (disabled), Basis Price (required).
 - **Defaults:** Sale Date = today (unless overridden elsewhere). Merch Gain, Service Fee, etc. can be empty.
-- **Futures Month:** Custom dropdown (`#futures_month_options`) populated by `populatFutureSelection()` (from `/assets/daily-futures.json` or similar). Selecting a month fills Futures Price.
+- **Futures Month:** Custom dropdown (`#futures_month_options`) populated by `populatFutureSelection()` (from `/daily-futures/daily-futures.json` or similar). Selecting a month fills Futures Price.
 - **Delivery/Location fields:** Delivery Location, HTA Contract Holder, Basis Contract Holder use a shared `<datalist id="delivery_location_list">` and placeholder “Search locations…”. Options are shown on **focus** (synthetic `input` + click) so the list appears without a second click.
 - **Cash Price:** Auto-calculated: `futures_price + basis_price + carry - service_fee` (carry only for Roll; for Add/Cash it’s 0 if empty).
 - **Validation:** See section 11. On save, new record gets `parent_id: null`, `status: 'Created'` (or `'Set'` for Cash), and a new `id`; `updated_at` set to now.

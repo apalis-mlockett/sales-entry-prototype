@@ -46,6 +46,9 @@ body {
 	color: #9ca3af;
 	white-space: nowrap;
 }
+.data-export-footer .btn-sm { font-size: 0.8rem; }
+.data-export-footer #exportImportMessage { min-height: 1.2em; }
+
 .set-quantity-footer {
 	margin-top: 20px;
 }
@@ -210,6 +213,10 @@ input.form-control::placeholder {
 .hideByDefault._show {
 	display:block;
 }
+/* Rows must stay flex so columns sit side by side */
+.hideByDefault._show.row {
+	display:flex;
+}
 .layout-spacer {
 	visibility: hidden;
 	pointer-events: none;
@@ -247,6 +254,12 @@ input.form-control::placeholder {
 ._hr {
 	border-bottom:1px solid #3d4d60;
 	height:8px;
+}
+/* Separator line below every row in the sales modal form */
+#salesModal .modal-body .container > .row,
+#salesModal .modal-body .container .row {
+	border-bottom: 1px solid #3d4d60;
+	padding-bottom: 1rem;
 }
 #addSalesBtn {
 	margin-bottom:0;

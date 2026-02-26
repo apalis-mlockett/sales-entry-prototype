@@ -3,7 +3,7 @@
  */
 
 /**
- * One row from the daily futures API/JSON (e.g. assets/daily-futures.json).
+ * One row from the daily futures API/JSON (e.g. daily-futures/daily-futures.json).
  * Prices are string values as returned from the API.
  */
 export interface DailyFuturesRow {

@@ -35,6 +35,73 @@ function saveSalesData() {
 	}
 }
 
+/** Export current sales_data as a downloadable JSON file. */
+function exportSalesDataToFile() {
+	const payload = { sales_ui_records: sales_data, exported_at: new Date().toISOString() };
+	const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+	const name = 'sales_ui_export_' + moment().format('YYYY-MM-DD_HH-mm') + '.json';
+	const a = document.createElement('a');
+	a.href = URL.createObjectURL(blob);
+	a.download = name;
+	a.click();
+	URL.revokeObjectURL(a.href);
+	showExportImportMessage('Export downloaded.', true);
+}
+
+/** Normalize parsed JSON to sales array; backfill updated_at. Returns { ok: boolean, data?: array, error?: string }. */
+function normalizeImportedData(parsed) {
+	let data = null;
+	if (Array.isArray(parsed)) {
+		data = parsed;
+	} else if (parsed && Array.isArray(parsed.sales_ui_records)) {
+		data = parsed.sales_ui_records;
+	} else {
+		return { ok: false, error: 'JSON must be an array of records or an object with "sales_ui_records" array.' };
+	}
+	if (!data.length) return { ok: false, error: 'No records in data.' };
+	const now = moment().toISOString();
+	data.forEach(function (r) {
+		if (!r.updated_at) r.updated_at = now;
+	});
+	return { ok: true, data };
+}
+
+/** Replace sales_data with imported array, persist and re-render. Returns error string on failure, null on success. */
+function importSalesData(parsed) {
+	const result = normalizeImportedData(parsed);
+	if (!result.ok) {
+		showExportImportMessage(result.error, false);
+		return result.error;
+	}
+	sales_data = result.data;
+	saveSalesData();
+	renderSalesTable();
+	showExportImportMessage('Import successful. ' + sales_data.length + ' record(s) loaded.', true);
+	return null;
+}
+
+function showExportImportMessage(text, isSuccess) {
+	const el = document.getElementById('exportImportMessage');
+	if (!el) return;
+	el.textContent = text;
+	el.classList.remove('text-danger', 'text-success');
+	el.classList.add(isSuccess ? 'text-success' : 'text-danger');
+	setTimeout(function () { el.textContent = ''; }, 5000);
+}
+
+/** Return a Tempus Dominus DateTime for the given Date, or null. Use for viewDate to avoid setLocalization errors. */
+function toTempusDominusDateTime(date) {
+	if (!date || !(date instanceof Date)) return null;
+	try {
+		const TD = typeof tempusDominus !== 'undefined' ? tempusDominus : null;
+		if (!TD || !TD.DateTime) return null;
+		if (typeof TD.DateTime.convert === 'function') return TD.DateTime.convert(date);
+		return new TD.DateTime(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
+	} catch (e) {
+		return null;
+	}
+}
+
 // Modal close/dirty tracking
 let modalInitialState = '';
 let modalIsDirty = false;
@@ -176,15 +243,26 @@ function openActionModal(actionType, record, splitQuantity = null) {
 	$('#sale_date').val((actionType === 'Set' || actionType === 'Roll') ? '' : moment().format('YYYY-MM-DD'));
 	if (actionType === 'Set' || actionType === 'Roll') {
 		$('#sale_date').attr('placeholder', '-Select-');
-		// Only selectable dates >= tracking record's Sale Date (local date, not UTC)
+		// Only selectable dates >= tracking record's Sale Date; no maxDate so user can navigate to future months
 		if (window.sales_date_picker && record.sale_date) {
-			const minDateLocal = moment(record.sale_date).startOf('day').toDate();
-			window.sales_date_picker.updateOptions({ restrictions: { minDate: minDateLocal } });
+			const m = moment(record.sale_date);
+			if (m.isValid()) {
+				const minDateLocal = m.startOf('day').toDate();
+				const viewDt = toTempusDominusDateTime(minDateLocal);
+				window.sales_date_picker.updateOptions({
+					restrictions: { minDate: minDateLocal, maxDate: undefined },
+					...(viewDt && { viewDate: viewDt })
+				});
+			} else {
+				window.sales_date_picker.updateOptions({ restrictions: { minDate: undefined, maxDate: undefined } });
+			}
+		} else if (window.sales_date_picker) {
+			window.sales_date_picker.updateOptions({ restrictions: { minDate: undefined, maxDate: undefined } });
 		}
 	} else {
 		$('#sale_date').attr('placeholder', '');
 		if (window.sales_date_picker) {
-			window.sales_date_picker.updateOptions({ restrictions: { minDate: undefined } });
+			window.sales_date_picker.updateOptions({ restrictions: { minDate: undefined, maxDate: undefined } });
 		}
 	}
 	$('#quantity').val((splitQuantity || record.quantity) != null ? formatSetQuantity(parseInt(splitQuantity || record.quantity, 10)) : '');
@@ -206,6 +284,7 @@ function openActionModal(actionType, record, splitQuantity = null) {
 	$('#delivery_location').val(record.delivery_location || '');
 	$('#delivery_month').val(record.delivery_month || '');
 	$('#merch_gain').val(''); // Set/Roll form: always reset to null
+	$('#storage_interest').val(''); // Set/Roll form: reset to empty
 
 	if (origin.sale_type === 'HTA') {
 		$('#nearby_futures_month').val(record.nearby_futures_month ? record.nearby_futures_month.slice(0, 7) : '');
@@ -283,10 +362,6 @@ function openActionModal(actionType, record, splitQuantity = null) {
 				updateRollFormDetailText();
 			});
 		});
-	} else {
-		$('#futures_price_roll_detail').hide().text('');
-		$('#carry_roll_detail').hide().text('');
-		$('#cash_price_hta_roll_detail').hide().text('');
 	}
 
 	$('#salesModal').modal('show');
@@ -513,6 +588,7 @@ const saveSale = async function(){
 	if (service_fee !== null && service_fee !== '') {
 		service_fee = parseFloat(service_fee);
 	}
+	let storage_interest = parseFloat($('#storage_interest').val()) || null;
 	if (carry !== null && carry !== '') {
 		carry = parseFloat(carry);
 	}
@@ -763,6 +839,7 @@ const saveSale = async function(){
 			futures_price: futures_price,
 			basis_price: basis_price,
 			service_fee: service_fee,
+			storage_interest: storage_interest,
 			cash_price: cash_price,
 			delivery_month: delivery_month,
 			comments: comments,
@@ -858,7 +935,7 @@ $(document).ready(function() {
 	});
 
 	// Update cash price when any of the component fields change
-	$('#futures_price, #futures_price_reference, #basis_price, #service_fee, #carry').on('input change blur', function() {
+	$('#futures_price, #futures_price_reference, #basis_price, #service_fee, #carry, #storage_interest').on('input change blur', function() {
 		calculateCashPrice();
 		if (currentActionStatus === 'Rolled') updateRollFormDetailText();
 	});
@@ -911,10 +988,14 @@ $(document).ready(function() {
 	let activePicker = null;
 
 	window.sales_date_picker.subscribe(tempusDominus.Namespace.events.show, () => {
-		if (activePicker && activePicker !== window.sales_date_picker) {
-			activePicker.hide();
+		try {
+			if (activePicker && activePicker !== window.sales_date_picker) {
+				activePicker.hide();
+			}
+			activePicker = window.sales_date_picker;
+		} catch (e) {
+			activePicker = window.sales_date_picker;
 		}
-		activePicker = window.sales_date_picker;
 	});
 
 	window.sales_date_picker.subscribe(tempusDominus.Namespace.events.hide, () => {
@@ -937,12 +1018,67 @@ $(document).ready(function() {
 	});
 
 
-	// Initialize tips
-	const popoverTriggerList = document.querySelectorAll('[data-bs-toggle="popover"]');
+	// Initialize tips (exclude form tips that get dynamic content on show)
+	const popoverTriggerList = document.querySelectorAll('[data-bs-toggle="popover"]:not(.cash-price-form-tip):not(.carry-form-tip):not(.futures-price-form-tip)');
 	const popoverList = [...popoverTriggerList].map(el => new bootstrap.Popover(el, {
 		trigger: 'click',
 		html: true
 	}));
+	// Cash Price form tip: build calculation breakdown when popover is shown
+	const cashPriceFormTipEl = document.getElementById('cash_price_form_tip');
+	if (cashPriceFormTipEl) {
+		const pop = new bootstrap.Popover(cashPriceFormTipEl, {
+			trigger: 'click',
+			html: true,
+			sanitize: false,
+			title: 'Cash Price Calculation',
+			content: '<em>Select a sales type and enter values.</em>',
+			container: 'body',
+			customClass: 'cash-price-form-popover'
+		});
+		cashPriceFormTipEl.addEventListener('show.bs.popover', function () {
+			const html = buildFormCashPriceBreakdownHtml();
+			pop.setContent({ '.popover-body': html || '<em>Enter form values to see the calculation.</em>' });
+		});
+		$(cashPriceFormTipEl).on('click', function(e) { e.stopPropagation(); });
+		popoverList.push(pop);
+	}
+	// Carry form tip: show formula on HTA Roll when popover is shown
+	const carryFormTipEl = document.getElementById('carry_form_tip');
+	if (carryFormTipEl) {
+		const carryPop = new bootstrap.Popover(carryFormTipEl, {
+			trigger: 'click',
+			html: true,
+			sanitize: false,
+			title: 'Carry',
+			content: 'Auto-sums the difference between the originating sale Futures Price and the Futures Price of the Futures Month you are rolling to.',
+			container: 'body',
+			customClass: 'carry-form-popover'
+		});
+		carryFormTipEl.addEventListener('show.bs.popover', function () {
+			carryPop.setContent({ '.popover-body': buildFormCarryBreakdownHtml() });
+		});
+		$(carryFormTipEl).on('click', function(e) { e.stopPropagation(); });
+		popoverList.push(carryPop);
+	}
+	// Futures Price form tip: show Original/Current prices on Roll when popover is shown
+	const futuresPriceFormTipEl = document.getElementById('futures_price_form_tip');
+	if (futuresPriceFormTipEl) {
+		const fpPop = new bootstrap.Popover(futuresPriceFormTipEl, {
+			trigger: 'click',
+			html: true,
+			sanitize: false,
+			title: 'Futures Price',
+			content: 'Price for the selected Futures Month.',
+			container: 'body',
+			customClass: 'futures-price-form-popover'
+		});
+		futuresPriceFormTipEl.addEventListener('show.bs.popover', function () {
+			fpPop.setContent({ '.popover-body': buildFormFuturesPriceBreakdownHtml() });
+		});
+		$(futuresPriceFormTipEl).on('click', function(e) { e.stopPropagation(); });
+		popoverList.push(fpPop);
+	}
 	
 	// Native BS tips were cool, but I didn't like you had to click the handle again to close.
 	// So I created this bubble listener to intuitively close tips when the user clicks.
@@ -971,6 +1107,25 @@ $(document).ready(function() {
 			modalIsDirty = false;
 			isInitializingModal = false;
 		}, 400);
+		// Re-apply Set/Roll date restrictions and viewDate once modal is visible
+		if ((currentActionStatus === 'Set' || currentActionStatus === 'Rolled') && currentActionRecord && window.sales_date_picker) {
+			const rec = currentActionRecord;
+			if (rec.sale_date) {
+				const m = moment(rec.sale_date);
+				if (m.isValid()) {
+					const minDateLocal = m.startOf('day').toDate();
+					const viewDt = toTempusDominusDateTime(minDateLocal);
+					window.sales_date_picker.updateOptions({
+						restrictions: { minDate: minDateLocal, maxDate: undefined },
+						...(viewDt && { viewDate: viewDt })
+					});
+				} else {
+					window.sales_date_picker.updateOptions({ restrictions: { minDate: undefined, maxDate: undefined } });
+				}
+			} else {
+				window.sales_date_picker.updateOptions({ restrictions: { minDate: undefined, maxDate: undefined } });
+			}
+		}
 		// Populate futures options for action modes
 		if (currentActionMode) {
 			populatFutureSelection();
@@ -1187,7 +1342,7 @@ $(document).ready(function() {
 	$(document).on('click', '#futures_month_dev_note', function(e) {
 		e.preventDefault();
 		const $msg = $('#futures_month_dev_note_msg');
-		const text = 'Will use API: /api/external/market/futures/crop/[CROP]/daily';
+		const text = 'Will use API: [/api/external/market/futures/crop/[CROP]/daily] to pull accurate/current futures months/prices.  For now, reading from spoofed .json flat files in ./assets/*';
 		if ($msg.hasClass('dev-note-visible')) {
 			$msg.removeClass('dev-note-visible').text('').hide();
 		} else {
@@ -1322,6 +1477,56 @@ $(document).ready(function() {
 		renderSalesTable();
 	});
 
+	// Export / Import data (footer)
+	$('#exportDataBtn').on('click', function () {
+		exportSalesDataToFile();
+	});
+	$('#importDataFile').on('change', function () {
+		const input = this;
+		const file = input.files && input.files[0];
+		if (!file) return;
+		const reader = new FileReader();
+		reader.onload = function () {
+			try {
+				const parsed = JSON.parse(reader.result);
+				importSalesData(parsed);
+			} catch (e) {
+				showExportImportMessage('Invalid JSON: ' + (e.message || 'parse error'), false);
+			}
+			input.value = '';
+		};
+		reader.readAsText(file, 'UTF-8');
+	});
+	$('#importPasteBtn').on('click', function () {
+		$('#importPasteText').val('').removeClass('is-invalid');
+		$('#importPasteError').text('');
+		bootstrap.Modal.getOrCreateInstance(document.getElementById('importPasteModal')).show();
+		$('#importPasteText').trigger('focus');
+	});
+	$('#importPasteConfirmBtn').on('click', function () {
+		const raw = $('#importPasteText').val().trim();
+		const $ta = $('#importPasteText');
+		const $err = $('#importPasteError');
+		if (!raw) {
+			$ta.addClass('is-invalid');
+			$err.text('Paste JSON first.');
+			return;
+		}
+		try {
+			const parsed = JSON.parse(raw);
+			const err = importSalesData(parsed);
+			if (err == null) {
+				bootstrap.Modal.getInstance(document.getElementById('importPasteModal')).hide();
+			} else {
+				$ta.addClass('is-invalid');
+				$err.text(err);
+			}
+		} catch (e) {
+			$ta.addClass('is-invalid');
+			$err.text('Invalid JSON: ' + (e.message || 'parse error'));
+		}
+	});
+
 });
 
 function clearSalesForm(){
@@ -1399,7 +1604,6 @@ function checkSalesType(){
 	
 	if (saleType == '') {
 		$('.hideByDefault').removeClass('_show');
-		$('#cash_price_hta_roll_detail, #futures_price_roll_detail, #carry_roll_detail').hide().text('');
 		updateMerchGainTip();
 		if ($deliveryLocationLabel.length) {
 			$deliveryLocationLabel.contents().first()[0].textContent = 'Delivery Location';
@@ -1410,13 +1614,14 @@ function checkSalesType(){
 		$('#storage_summary').css('display', 'none');
 	}
 	else {
-
 		$('#sales_form_elem').addClass('_show');
+		$('#sale_date_col_elem').addClass('_show');
 		updateMerchGainTip();
 		$futuresPriceElem.removeClass('_show').removeClass('layout-spacer');
 		$basisPriceElem.removeClass('_show').removeClass('layout-spacer');
 		$deliveryMonthElem.removeClass('_show').removeClass('layout-spacer');
 		$deliveryLocationElem.removeClass('_show').removeClass('layout-spacer');
+		$('#hta_comp_initial_row').removeClass('_show');
 		$nearbyFuturesMonthElem.removeClass('_show').removeClass('layout-spacer');
 		$initialBasisPriceElem.removeClass('_show').removeClass('layout-spacer');
 		$carryElem.removeClass('_show').removeClass('layout-spacer');
@@ -1435,6 +1640,7 @@ function checkSalesType(){
 		// Show/hide elements based on sale type
 		if (saleType == 'HTA') {
 			$('#hta_contract_holder_elem').addClass('_show');
+			$('#hta_comp_initial_row').addClass('_show');
 			$nearbyFuturesMonthElem.addClass('_show');
 			$initialBasisPriceElem.addClass('_show');
 			$futuresPriceElem.addClass('_show');
@@ -1469,10 +1675,6 @@ function checkSalesType(){
 			$('#req_quantity').removeClass('required-asterisk-hidden');
 			$('#req_futures_price').removeClass('required-asterisk-hidden');
 			$('#req_hta_contract_holder').removeClass('required-asterisk-hidden');
-			// On HTA form load (Add Sale), auto-select Dec 2026
-			if (!$('#sale_id').val() && !currentActionStatus && !$('#futures_month').val()) {
-				selectDefaultHtaFuturesMonth();
-			}
 		}
 		else {
 			$('#hta_contract_holder_elem').removeClass('_show');
@@ -1518,8 +1720,7 @@ function checkSalesType(){
 		
 		if (saleType == 'Basis') {
 			$('#basis_contract_holder_elem').addClass('_show');
-			$nearbyFuturesMonthElem.addClass('_show').addClass('layout-spacer');
-			$initialBasisPriceElem.addClass('_show').addClass('layout-spacer');
+			/* Comp. Fut. Month / Initial Basis Price row is HTA-only; do not show for Basis to avoid blank row */
 			$basisPriceElem.addClass('_show');
 			$futuresPriceElem.addClass('_show');
 			$deliveryMonthElem.addClass('_show');
@@ -1656,29 +1857,6 @@ const populatFutureSelection = async function(useFutureFile = false) {
 	sortFuturesMonthOptions(nearby_futures_month_options);
 };
 
-function selectDefaultHtaFuturesMonth() {
-	const dec2026 = $('#futures_month_options li').filter(function() {
-		const m = $(this).attr('data-futures-month') || $(this).data('futures_month') || '';
-		return m.startsWith('2026-12');
-	}).first();
-	if (dec2026.length && !dec2026.hasClass('futures-month-disabled')) {
-		const futuresMonth = dec2026.attr('data-futures-month') || dec2026.data('futures_month');
-		const futuresPrice = dec2026.attr('data-futures-price') ?? dec2026.data('futures_price');
-		const $a = dec2026.find('a');
-		$('#futures_month').val(futuresMonth);
-		if (futuresPrice != null && futuresPrice !== '') {
-			const priceValue = parseFloat(futuresPrice);
-			if (!Number.isNaN(priceValue)) {
-				$('#futures_price').val(priceValue.toFixed(4));
-				$('#futures_price_reference').val(priceValue.toFixed(4));
-			}
-		}
-		$('#futuresMonthSelector').html($a.html());
-		$('#futures_price_as_of').empty();
-		$('#futures_price').trigger('input');
-	}
-}
-
 function clearAsOf(e){
 	$('#'+e).empty();
 }
@@ -1686,7 +1864,7 @@ function clearAsOf(e){
 function getDailyFuturesForToday() {
 	return new Promise((resolve, reject) => {
 		setTimeout(() => {
-			fetch('./assets/daily-futures.json')
+			fetch('./daily-futures/daily-futures.json')
 				.then((response) => {
 					if (!response.ok) throw new Error('Failed to load futures data');
 					return response.json();
@@ -1700,7 +1878,7 @@ function getDailyFuturesForToday() {
 function getFutureDailyFuturesForRoll() {
 	return new Promise((resolve, reject) => {
 		setTimeout(() => {
-			fetch('./assets/future-daily-futures.json')
+			fetch('./daily-futures/future-daily-futures.json')
 				.then((response) => {
 					if (!response.ok) throw new Error('Failed to load future futures data');
 					return response.json();
@@ -1711,13 +1889,41 @@ function getFutureDailyFuturesForRoll() {
 	});
 }
 
-function updateRollFormDetailText() {
+/** Build Carry tip content: on HTA Roll show formula (Current Roll Month − Current Orig Month = Carry), else static description. */
+function buildFormCarryBreakdownHtml() {
 	const isRoll = currentActionStatus === 'Rolled' && currentActionRecord;
 	const saleType = $('#sale_type').val();
 	const isHtaRoll = isRoll && saleType === 'HTA';
+	if (!isHtaRoll || !currentActionRecord) {
+		return 'Auto-sums the difference between the originating sale Futures Price and the Futures Price of the Futures Month you are rolling to.';
+	}
+	const origMonthKey = (currentActionRecord.futures_month || '').slice(0, 7);
+	const rollMonthKey = ($('#futures_month').val() || '').slice(0, 7);
+	const origMonthFmt = origMonthKey ? formatMonth(currentActionRecord.futures_month) : '--';
+	const rollMonthFmt = rollMonthKey ? formatMonth($('#futures_month').val()) : '--';
+	const origData = futureFuturesDataByMonth[origMonthKey];
+	const rollData = rollMonthKey ? futureFuturesDataByMonth[rollMonthKey] : null;
+	if (!rollMonthKey || !origData || !rollData) {
+		return 'Select a Futures Month to roll to and ensure price data is loaded. Carry = Current Roll Month price − Current Orig. Month price.';
+	}
+	const currentOrigPrice = origData.last != null ? formatPrice(origData.last) : '--';
+	const currentRollPrice = rollData.last != null ? formatPrice(rollData.last) : '--';
+	const carryVal = parseFloat($('#carry').val()) || 0;
+	const totalLine = `<div class="roll-math-line border-top border-secondary pt-1 mt-1"><span class="roll-math-op" style="visibility:hidden">+</span><span class="roll-math-val" style="color:#77ff76;font-weight:bold">${formatPriceOrZero(carryVal)}</span> (Carry)</div>`;
+	return (
+		'<div class="roll-math-vertical">' +
+		`<div class="roll-math-line"><span class="roll-math-op"></span><span class="roll-math-val">${currentRollPrice}</span> (Current ${rollMonthFmt})</div>` +
+		`<div class="roll-math-line"><span class="roll-math-op">−</span><span class="roll-math-val">${currentOrigPrice}</span> (Current ${origMonthFmt})</div>` +
+		totalLine +
+		'</div>'
+	);
+}
+
+/** Build Futures Price tip content: on Roll show Original/Current prices by month, else static description. */
+function buildFormFuturesPriceBreakdownHtml() {
+	const isRoll = currentActionStatus === 'Rolled' && currentActionRecord;
 	if (!isRoll) {
-		$('#futures_price_roll_detail, #carry_roll_detail').hide().text('');
-		return;
+		return 'Price for the selected Futures Month.';
 	}
 	const origMonthKey = (currentActionRecord.futures_month || '').slice(0, 7);
 	const rollMonthKey = ($('#futures_month').val() || '').slice(0, 7);
@@ -1728,46 +1934,42 @@ function updateRollFormDetailText() {
 	const rollData = rollMonthKey ? futureFuturesDataByMonth[rollMonthKey] : null;
 	const currentOrigPrice = origData && origData.last != null ? formatPrice(origData.last) : '--';
 	const currentRollPrice = rollData && rollData.last != null ? formatPrice(rollData.last) : '--';
-	const carryVal = parseFloat($('#carry').val()) || 0;
-	const carryTxt = formatPrice(carryVal);
-
-	const fpLines = [
+	const lines = [
 		`Original ${origMonthFmt}: ${origPrice}`,
 		`Current ${origMonthFmt}: ${currentOrigPrice}`,
 		(rollMonthKey && rollMonthKey > origMonthKey) ? `Current ${rollMonthFmt}: ${currentRollPrice}` : null
 	].filter(Boolean);
-	$('#futures_price_roll_detail').html(fpLines.join('<br>')).show();
+	return lines.join('<br>');
+}
 
-	if (rollMonthKey && origData && rollData) {
-		$('#carry_roll_detail').html(
-			'<div class="roll-math-vertical">' +
-			`<div class="roll-math-line"><span class="roll-math-op"></span><span class="roll-math-val">${currentRollPrice}</span> (Current ${rollMonthFmt})</div>` +
-			`<div class="roll-math-line"><span class="roll-math-op">−</span><span class="roll-math-val">${currentOrigPrice}</span> (Current ${origMonthFmt})</div>` +
-			'</div>'
-		).show();
-	} else {
-		$('#carry_roll_detail').hide().text('');
-	}
-
-	if (isHtaRoll) {
-		$('#cash_price_hta_roll_detail').html(
-			'<div class="roll-math-vertical">' +
-			`<div class="roll-math-line"><span class="roll-math-op"></span><span class="roll-math-val">${origPrice}</span> (Orig. ${origMonthFmt})</div>` +
-			`<div class="roll-math-line"><span class="roll-math-op">+</span><span class="roll-math-val">${carryTxt}</span> (Carry)</div>` +
-			'</div>'
-		).show();
-	}
+function updateRollFormDetailText() {
+	// Futures Price and Carry roll-detail content moved to their respective form tips
 }
 
 function tableTipCloseCaptureHandler(e) {
 	const $target = $(e.target);
-	const isInsideTipOrPopover = $target.closest('.merch-value-tip, .avg-cash-price-tip, .final-sale-value-tip, .merch-value-popover, .avg-cash-price-popover, .final-sale-value-popover').length > 0;
-	const hasOpenTablePopover = document.querySelector('.merch-value-popover.show, .avg-cash-price-popover.show, .final-sale-value-popover.show');
+	const isInsideTipOrPopover = $target.closest('.merch-value-tip, .avg-cash-price-tip, .final-sale-value-tip, .cash-price-form-tip, .carry-form-tip, .futures-price-form-tip, .merch-value-popover, .avg-cash-price-popover, .final-sale-value-popover, .cash-price-form-popover, .carry-form-popover, .futures-price-form-popover').length > 0;
+	const hasOpenTablePopover = document.querySelector('.merch-value-popover.show, .avg-cash-price-popover.show, .final-sale-value-popover.show, .cash-price-form-popover.show, .carry-form-popover.show, .futures-price-form-popover.show');
 	if (hasOpenTablePopover && !isInsideTipOrPopover) {
 		$('#sales_data .merch-value-tip, #sales_data .avg-cash-price-tip, #sales_data .final-sale-value-tip').each(function() {
 			const popover = bootstrap.Popover.getInstance(this);
 			if (popover) popover.hide();
 		});
+		const formTipEl = document.getElementById('cash_price_form_tip');
+		if (formTipEl) {
+			const formPop = bootstrap.Popover.getInstance(formTipEl);
+			if (formPop) formPop.hide();
+		}
+		const carryTipEl = document.getElementById('carry_form_tip');
+		if (carryTipEl) {
+			const carryPopover = bootstrap.Popover.getInstance(carryTipEl);
+			if (carryPopover) carryPopover.hide();
+		}
+		const futuresPriceTipEl = document.getElementById('futures_price_form_tip');
+		if (futuresPriceTipEl) {
+			const fpPopover = bootstrap.Popover.getInstance(futuresPriceTipEl);
+			if (fpPopover) fpPopover.hide();
+		}
 		e.stopPropagation();
 		e.preventDefault();
 	}
@@ -1850,18 +2052,94 @@ function calculateCashPrice() {
 			futuresPrice = Number.isNaN(referencePrice) ? 0 : referencePrice;
 		}
 	}
-	const basisPrice = parseFloat($('#basis_price').val()) || 0;
+	let basisPrice = parseFloat($('#basis_price').val()) || 0;
 	const serviceFee = parseFloat($('#service_fee').val()) || 0;
-	const carryPrice = parseFloat($('#carry').val()) || 0;
-	const cashPrice = futuresPrice + basisPrice + carryPrice - serviceFee;
-	$('#cash_price').val(cashPrice.toFixed(4));
-	const $detail = $('#cash_price_hta_roll_detail');
-	if (isHtaRoll && $detail.length) {
-		// Cash Price detail is updated by updateRollFormDetailText (vertical format)
-		$detail.show();
-	} else if ($detail.length) {
-		$detail.hide().empty();
+	const storageInterest = parseFloat($('#storage_interest').val()) || 0;
+	let carryPrice = parseFloat($('#carry').val()) || 0;
+	// HTA first-created: Cash Price = Futures Price + Initial Basis Price (if not null) - service fee (no Carry; we only collect Carry on Roll)
+	const isHtaCreate = saleType === 'HTA' && currentActionStatus !== 'Set' && !isHtaRoll;
+	if (isHtaCreate) {
+		const initialBasis = parseFloat($('#initial_basis_price').val());
+		if (initialBasis != null && !Number.isNaN(initialBasis)) basisPrice = initialBasis;
+		carryPrice = 0;
 	}
+	const cashPrice = futuresPrice + basisPrice + carryPrice - serviceFee - storageInterest;
+	$('#cash_price').val(cashPrice.toFixed(4));
+}
+
+/** Format value for display; use $0.0000 when null/NaN. */
+function formatPriceOrZero(val) {
+	if (val == null || Number.isNaN(val)) return '$0.0000';
+	return '$' + parseFloat(val).toFixed(4);
+}
+
+/** Build Cash Price calculation breakdown HTML for the current form (Create/Roll/Set by type). */
+function buildFormCashPriceBreakdownHtml() {
+	const saleType = $('#sale_type').val();
+	if (!saleType) return '<em>Select a sales type to see the Cash Price calculation.</em>';
+	const isHtaRoll = currentActionStatus === 'Rolled' && saleType === 'HTA' && currentActionRecord;
+	const isSet = currentActionStatus === 'Set';
+	const cashPriceValColors = { zero: '#9ca3af', green: '#77ff76', red: '#ff7474' };
+	const lineColor = (label, num) => (num === 0 ? cashPriceValColors.zero : (label === 'Initial Basis Price' || label === 'Service Fee' || label === 'Storage/Interest' ? cashPriceValColors.red : cashPriceValColors.green));
+	const lines = [];
+	const addLine = (label, val, op = '+') => {
+		const num = (val != null && !Number.isNaN(val)) ? val : 0;
+		lines.push({ op, label, fmt: formatPriceOrZero(num), color: lineColor(label, num) });
+	};
+	const totalLine = (cash) => {
+		const totalColor = (cash != null && !Number.isNaN(cash) && cash < 0) ? cashPriceValColors.red : cashPriceValColors.green;
+		return `<div class="roll-math-line border-top border-secondary pt-1 mt-1"><span class="roll-math-op" style="visibility:hidden">+</span><span class="roll-math-val" style="color:${totalColor};font-weight:bold">${formatPriceOrZero(cash)}</span> (Cash Price)</div>`;
+	};
+	if (isHtaRoll && currentActionRecord) {
+		const origPrice = parseFloat(currentActionRecord.futures_price);
+		const carryVal = parseFloat($('#carry').val());
+		const serviceFeeRoll = parseFloat($('#service_fee').val());
+		const storageInterestRoll = parseFloat($('#storage_interest').val());
+		const origNum = Number.isNaN(origPrice) ? 0 : origPrice;
+		const carryNum = Number.isNaN(carryVal) ? 0 : carryVal;
+		const serviceFeeNum = (serviceFeeRoll != null && !Number.isNaN(serviceFeeRoll)) ? serviceFeeRoll : 0;
+		const storageInterestNumRoll = (storageInterestRoll != null && !Number.isNaN(storageInterestRoll)) ? storageInterestRoll : 0;
+		addLine(`Orig. ${currentActionRecord.futures_month ? formatMonth(currentActionRecord.futures_month) : 'Futures'}`, origNum, '');
+		addLine('Carry', carryNum, '+');
+		addLine('Storage/Interest', storageInterestNumRoll, '−');
+		addLine('Service Fee', serviceFeeNum, '−');
+		const cash = origNum + carryNum - storageInterestNumRoll - serviceFeeNum;
+		return `<div class="roll-math-vertical">${lines.map(l => `<div class="roll-math-line"><span class="roll-math-op">${l.op}</span><span class="roll-math-val" style="color:${l.color}">${l.fmt}</span> (${l.label})</div>`).join('')}${totalLine(cash)}</div>`;
+	}
+	let futuresPrice = parseFloat($('#futures_price').val());
+	if (Number.isNaN(futuresPrice)) futuresPrice = parseFloat($('#futures_price_reference').val());
+	const serviceFee = parseFloat($('#service_fee').val());
+	const storageInterest = parseFloat($('#storage_interest').val());
+	const storageInterestNum = (storageInterest != null && !Number.isNaN(storageInterest)) ? storageInterest : 0;
+	const carry = parseFloat($('#carry').val());
+	if (saleType === 'HTA' && !isSet && !isHtaRoll) {
+		const initialBasis = parseFloat($('#initial_basis_price').val());
+		addLine('Futures Price', futuresPrice, '');
+		addLine('Initial Basis Price', initialBasis, '+');
+		addLine('Storage/Interest', storageInterestNum, '−');
+		addLine('Service Fee', (serviceFee != null && !Number.isNaN(serviceFee)) ? Math.abs(serviceFee) : 0, '−');
+	} else if (saleType === 'Cash') {
+		const basisPrice = parseFloat($('#basis_price').val());
+		addLine('Futures Price', futuresPrice, '');
+		addLine('Basis Price', basisPrice, '+');
+		addLine('Storage/Interest', storageInterestNum, '−');
+		addLine('Service Fee', (serviceFee != null && !Number.isNaN(serviceFee)) ? Math.abs(serviceFee) : 0, '−');
+	} else if (saleType === 'HTA' && isSet) {
+		const basisPrice = parseFloat($('#basis_price').val());
+		addLine('Futures Price', futuresPrice, '');
+		addLine('Basis Price', basisPrice, '+');
+		addLine('Storage/Interest', storageInterestNum, '−');
+		addLine('Service Fee', (serviceFee != null && !Number.isNaN(serviceFee)) ? Math.abs(serviceFee) : 0, '−');
+	} else {
+		const basisPrice = parseFloat($('#basis_price').val());
+		addLine('Futures Price', futuresPrice, '');
+		addLine('Basis Price', basisPrice, '+');
+		addLine('Carry', carry, '+');
+		addLine('Storage/Interest', storageInterestNum, '−');
+		addLine('Service Fee', (serviceFee != null && !Number.isNaN(serviceFee)) ? Math.abs(serviceFee) : 0, '−');
+	}
+	const cashVal = parseFloat($('#cash_price').val()) || 0;
+	return `<div class="roll-math-vertical">${lines.map(l => `<div class="roll-math-line"><span class="roll-math-op">${l.op}</span><span class="roll-math-val" style="color:${l.color}">${l.fmt}</span> (${l.label})</div>`).join('')}${totalLine(cashVal)}</div>`;
 }
 
 function formatQuantity(quantity) {
@@ -1887,7 +2165,8 @@ function buildMerchValueBreakdownHtml(saleId) {
 	const allRecords = [origin, ...children.filter(r => r.id !== origin.id)].sort((a, b) =>
 		moment(a.sale_date || 0) - moment(b.sale_date || 0)
 	);
-	const driverOrder = ['Merch Gain', 'Service Fee', 'Carry', 'Net Initial Basis'];
+	// Positive-value drivers first (Merch Gain, Carry, Net Initial Basis), then negative (Storage/Interest, Service Fee)
+	const driverOrder = ['Merch Gain', 'Carry', 'Net Initial Basis', 'Storage/Interest', 'Service Fee'];
 	const rows = [];
 	let totalMerchValue = 0;
 	allRecords.forEach((rec) => {
@@ -1901,6 +2180,12 @@ function buildMerchValueBreakdownHtml(saleId) {
 		// Merch Gain
 		const mg = formatMerchValueDriver(rec.merch_gain);
 		if (mg) drivers.push({ name: 'Merch Gain', ...mg });
+		// Storage/Interest (subtracted in calc, show as negative when present)
+		const si = rec.storage_interest != null && rec.storage_interest !== '' ? parseFloat(rec.storage_interest) : NaN;
+		if (!Number.isNaN(si) && si > 0) {
+			const siFmt = formatMerchValueDriver(-Math.abs(si));
+			if (siFmt) drivers.push({ name: 'Storage/Interest', ...siFmt });
+		}
 		// Service Fee (subtracted in calc, show as negative when present)
 		const sf = rec.service_fee != null && rec.service_fee !== '' ? parseFloat(rec.service_fee) : NaN;
 		if (!Number.isNaN(sf)) {
@@ -1947,7 +2232,14 @@ function buildMerchValueBreakdownHtml(saleId) {
 	totalMerchValue = rows.reduce((sum, r) => sum + (r.adjustedVal != null && !Number.isNaN(r.adjustedVal) ? r.adjustedVal : 0), 0);
 	const totalColor = totalMerchValue < 0 ? '#ff7474' : '#77ff76';
 	const totalTxt = formatPrice(totalMerchValue);
-	const rowHtml = rows.map(r => `<tr><td>${r.date}</td><td>${r.action}</td><td>${r.qty}</td><td>${r.futMonth}</td><td>${r.driver}</td><td style="text-align:right;color:${r.color}">${r.txt}</td></tr>`).join('');
+	// Show Date and Action only on first row of each (date, action) group to avoid duplicate cell entries
+	const rowHtml = rows.map((r, i) => {
+		const prev = i > 0 ? rows[i - 1] : null;
+		const showDateAction = !prev || prev.date !== r.date || prev.action !== r.action;
+		const dateCell = showDateAction ? r.date : '';
+		const actionCell = showDateAction ? r.action : '';
+		return `<tr><td>${dateCell}</td><td>${actionCell}</td><td>${r.qty}</td><td>${r.futMonth}</td><td>${r.driver}</td><td style="text-align:right;color:${r.color}">${r.txt}</td></tr>`;
+	}).join('');
 	const summaryRow = `<tr><td colspan="5"><strong>Merch Value:</strong></td><td style="text-align:right;color:${totalColor}">${totalTxt}</td></tr>`;
 	return `<div class="merch-value-tip-table" style="font-size:0.7rem"><table class="table table-sm table-borderless mb-0"><thead><tr><th>Date</th><th>Action</th><th>Qty (bu.)</th><th>Fut. Month</th><th>Driver</th><th style="text-align:right">Value / bu.</th></tr></thead><tbody>${rowHtml}${summaryRow}</tbody></table></div>`;
 }
@@ -2186,9 +2478,12 @@ const editSaleLedger = async function(id){
 		} else {
 			$('#initial_basis_price').val('');
 		}
-		
 		if (record.hta_contract_holder) {
 			$('#hta_contract_holder').val(record.hta_contract_holder);
+		}
+		// HTA Set form shows "HTA Delivery Location" in #delivery_location; populate it when present
+		if (record.delivery_location) {
+			$('#delivery_location').val(record.delivery_location);
 		}
 	}
 	
@@ -2196,6 +2491,11 @@ const editSaleLedger = async function(id){
 		$('#merch_gain').val(record.merch_gain.toFixed(4));
 	} else {
 		$('#merch_gain').val('');
+	}
+	if (record.storage_interest !== null && record.storage_interest !== undefined) {
+		$('#storage_interest').val(record.storage_interest.toFixed(4));
+	} else {
+		$('#storage_interest').val('');
 	}
 	
 	if (record.sale_type === 'Cash') {
@@ -2207,6 +2507,10 @@ const editSaleLedger = async function(id){
 	if (record.sale_type === 'Basis') {
 		if (record.basis_contract_holder) {
 			$('#basis_contract_holder').val(record.basis_contract_holder);
+		}
+		// Basis Set form shows "Basis Delivery Location" in #delivery_location; populate when present
+		if (record.delivery_location) {
+			$('#delivery_location').val(record.delivery_location);
 		}
 	}
 	
@@ -2547,9 +2851,8 @@ function renderSalesTable() {
 			.filter(record => record.status === 'Rolled')
 			.reduce((sum, record) => sum + (parseInt(record.quantity || 0, 10) || 0), 0);
 		const remainingQuantity = getRemainingQuantity(originRecord);
-		const hasSetRecords = (originRecord.sale_type === 'Cash') || totalSetQuantity > 0;
 		const originQtyForMerch = parseInt(originRecord.quantity || 0, 10) || 0;
-		const merchValue = hasSetRecords ? allChildRecords.reduce((sum, record) => {
+		const merchValue = allChildRecords.reduce((sum, record) => {
 			const merchGain = parseFloat(record.merch_gain);
 			const carry = parseFloat(record.carry);
 			const serviceFee = parseFloat(record.service_fee);
@@ -2567,7 +2870,7 @@ function renderSalesTable() {
 			const recQty = parseInt(record.quantity || 0, 10) || 0;
 			const weight = originQtyForMerch > 0 && recQty > 0 ? Math.min(1, recQty / originQtyForMerch) : 1;
 			return sum + (net * weight);
-		}, 0) : null;
+		}, 0);
 		
 		// Compute parent status per requirements
 		const originQty = parseInt(originRecord.quantity || 0, 10) || 0;
@@ -2607,15 +2910,13 @@ function renderSalesTable() {
 		mainRow.append($('<td>').html(parentStatusCell));
 		mainRow.append($('<td>').html($('<div>').addClass('_cell').text(formatQuantity(originRecord.quantity))));
 		const merchValueCellInner = $('<div>').addClass('_cell').css('display', 'inline-flex').css('align-items', 'center').css('gap', '4px');
-		const hasMerchValue = merchValue != null && merchValue !== '' && merchValue !== 0;
-		if (hasMerchValue) {
-			const merchValueTipIcon = $('<span>').addClass('merch-value-tip sale_tip').attr('data-bs-toggle', 'popover').attr('data-bs-html', 'true').attr('data-bs-title', 'Merch Value Calculation').attr('data-sale-id', sale.id).html('<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="12" y1="8" x2="12" y2="8"></line><line x1="12" y1="11" x2="12" y2="16"></line></svg>');
-			merchValueTipIcon.on('click', function(e) { e.stopPropagation(); });
-			merchValueCellInner.append(merchValueTipIcon);
-		}
+		const merchValueTipIcon = $('<span>').addClass('merch-value-tip sale_tip').attr('data-bs-toggle', 'popover').attr('data-bs-html', 'true').attr('data-bs-title', 'Merch Value Calculation').attr('data-sale-id', sale.id).html('<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="12" y1="8" x2="12" y2="8"></line><line x1="12" y1="11" x2="12" y2="16"></line></svg>');
+		merchValueTipIcon.on('click', function(e) { e.stopPropagation(); });
+		merchValueCellInner.append(merchValueTipIcon);
 		const valueSpan = $('<span>').addClass('merch-value-text');
-		if (hasMerchValue) {
-			const priceSpan = $('<span>').text(formatPrice(merchValue)).css('color', merchValue < 0 ? '#ff7474' : '#77ff76');
+		const merchNum = (typeof merchValue === 'number' && !Number.isNaN(merchValue)) ? merchValue : null;
+		if (merchNum != null) {
+			const priceSpan = $('<span>').text(formatPrice(merchNum)).css('color', merchNum < 0 ? '#ff7474' : '#77ff76');
 			valueSpan.append(priceSpan).append(document.createTextNode(' / bu.'));
 		} else {
 			valueSpan.text('--');
@@ -2701,6 +3002,7 @@ function renderSalesTable() {
 				.append($('<th>').text('Merch Gain'))
 				.append($('<th>').text('Carry'))
 				.append($('<th>').text('Basis Price'))
+				.append($('<th>').text('Storage/Interest'))
 				.append($('<th>').text('Service Fee'))
 				.append($('<th>').text('Cash Price'))
 				.append($('<th>').text('Contract Holder'))
@@ -2874,6 +3176,15 @@ function renderSalesTable() {
 						basisCell.append(netLine);
 					}
 					return basisCell;
+				})())
+				.append((() => {
+					const storageVal = ledger.storage_interest != null && ledger.storage_interest !== '' ? parseFloat(ledger.storage_interest) : null;
+					const storageDisplay = (storageVal != null && storageVal > 0) ? `(${formatPrice(ledger.storage_interest)})` : formatPrice(ledger.storage_interest);
+					const storageCell = $('<td>').text(storageDisplay);
+					if (storageVal != null && storageVal > 0) {
+						storageCell.css('color', '#ff7474');
+					}
+					return storageCell;
 				})())
 				.append((() => {
 					const feeVal = ledger.service_fee != null && ledger.service_fee !== '' ? parseFloat(ledger.service_fee) : null;

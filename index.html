@@ -50,7 +50,28 @@
 			<tbody id="sales_data"></tbody>
 		</table>
 	</div>
-	
+
+	<footer class="data-export-footer mt-4 py-3 border-top border-secondary">
+		<div class="row align-items-center g-2">
+			<div class="col-auto">
+				<span class="text-muted small">Data:</span>
+			</div>
+			<div class="col-auto">
+				<button type="button" class="btn btn-sm btn-outline-secondary" id="exportDataBtn" title="Download current data as JSON">Export JSON</button>
+			</div>
+			<div class="col-auto">
+				<label class="btn btn-sm btn-outline-secondary mb-0" for="importDataFile" title="Upload a JSON file to replace current data">Import file</label>
+				<input type="file" id="importDataFile" accept=".json,application/json" class="d-none" />
+			</div>
+			<div class="col-auto">
+				<button type="button" class="btn btn-sm btn-outline-secondary" id="importPasteBtn" title="Paste JSON to replace current data">Import paste</button>
+			</div>
+			<div class="col-auto">
+				<span class="small text-muted" id="exportImportMessage" aria-live="polite"></span>
+			</div>
+		</div>
+	</footer>
+
 </div>
 
 <div class="modal fade" id="salesModal" tabindex="-1" aria-hidden="true">
@@ -86,9 +107,20 @@
 								</select>
 							</div>
 						</div>
-							<div class="col-3 hideByDefault" id="merch_gain_elem">
+						<div class="col-3 hideByDefault" id="sale_date_col_elem">
 							<div class="my-3">
-									<div class="sale_tip" id="merch_gain_tip" data-bs-toggle="popover" data-bs-title="Merch Gain" data-bs-content="If this Cash sale has been advised, and there is a direct per-bushel advantage, enter a value here.">
+								<label for="sale_date" class="form-label">Sale Date<span class="required-asterisk required-asterisk-hidden" id="req_sale_date">*</span></label>
+								<div class="input-group" id="sale_date_select" data-td-target-input="nearest">
+									<input id="sale_date" type="text" class="form-control" data-td-target="#sale_date_select" autocomplete="off" />
+									<span class="input-group-text" data-td-toggle="datetimepicker" data-td-target="#sale_date_select">
+										<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="3" x2="9" y2="6"/><line x1="15" y1="3" x2="15" y2="6"/><circle cx="8" cy="12.5" r="0.7"/><circle cx="12" cy="12.5" r="0.7"/><circle cx="16" cy="12.5" r="0.7"/><circle cx="8" cy="16" r="0.7"/><circle cx="12" cy="16" r="0.7"/><circle cx="16" cy="16" r="0.7"/></svg>
+									</span>
+								</div>
+							</div>
+						</div>
+						<div class="col-3 hideByDefault" id="merch_gain_elem">
+							<div class="my-3">
+								<div class="sale_tip" id="merch_gain_tip" data-bs-toggle="popover" data-bs-title="Merch Gain" data-bs-content="If this Cash sale has been advised, and there is a direct per-bushel advantage, enter a value here.">
 									<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="12" y1="8" x2="12" y2="8"></line><line x1="12" y1="11" x2="12" y2="16"></line></svg>
 								</div>
 								<label for="merch_gain" class="form-label">Merch Gain</label>
@@ -99,7 +131,9 @@
 								</div>
 							</div>
 						</div>
-						<div class="col-3 hideByDefault" id="nearby_futures_month_elem">
+					</div>
+					<div class="row flex-nowrap hideByDefault" id="hta_comp_initial_row">
+						<div class="col-3" id="nearby_futures_month_elem">
 							<div class="dropdown calendar-dropdown my-3">
 								<label for="nearbyFuturesMonthSelector" class="form-label">Comp. Fut. Month<span class="required-asterisk required-asterisk-hidden" id="req_nearby_futures_month">*</span></label>
 								<div class="sale_tip" data-bs-toggle="popover" data-bs-title="Comp Futures Month" data-bs-content="To help track the value of merchandising advisement, select the applicable nearby futures month to compare this HTA sale against.">
@@ -114,7 +148,7 @@
 								<div class="sm_txt" id="nearby_futures_price_txt"></div>
 							</div>
 						</div>
-						<div class="col-3 hideByDefault" id="initial_basis_price_elem">
+						<div class="col-3" id="initial_basis_price_elem">
 							<div class="my-3">
 								<label for="initial_basis_price" class="form-label">Initial Basis Price<span class="required-asterisk required-asterisk-hidden" id="req_initial_basis_price">*</span></label>
 								<div class="sale_tip" data-bs-toggle="popover" data-bs-title="Initial Basis Price" data-bs-content="To help track the value of merchandising advisement, enter the applicable basis bid to compare this HTA sale against.">
@@ -133,17 +167,6 @@
 						<div class="_hr"></div>
 
 						<div class="row">
-							<div class="col-3">
-								<div class="my-3">
-									<label for="sale_date" class="form-label">Sale Date<span class="required-asterisk required-asterisk-hidden" id="req_sale_date">*</span></label>
-									<div class="input-group" id="sale_date_select" data-td-target-input="nearest">
-										<input id="sale_date" type="text" class="form-control" data-td-target="#sale_date_select" autocomplete="off" />
-										<span class="input-group-text" data-td-toggle="datetimepicker" data-td-target="#sale_date_select">
-											<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="3" x2="9" y2="6"/><line x1="15" y1="3" x2="15" y2="6"/><circle cx="8" cy="12.5" r="0.7"/><circle cx="12" cy="12.5" r="0.7"/><circle cx="16" cy="12.5" r="0.7"/><circle cx="8" cy="16" r="0.7"/><circle cx="12" cy="16" r="0.7"/><circle cx="16" cy="16" r="0.7"/></svg>
-										</span>
-									</div>
-								</div>
-							</div>
 							<div class="col-3">
 								<div class="dropdown calendar-dropdown my-3">
 									<label for="futuresMonthSelector" class="form-label d-flex justify-content-between align-items-center">
@@ -171,6 +194,19 @@
 							</div>
 							<div class="col-3">
 								<div class="my-3">
+									<div class="sale_tip" data-bs-toggle="popover" data-bs-title="Storage/Interest" data-bs-content="Storage/Interest cost (per bushel) for storing grain additional months, until delivery.">
+										<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="12" y1="8" x2="12" y2="8"></line><line x1="12" y1="11" x2="12" y2="16"></line></svg>
+									</div>
+									<label for="storage_interest" class="form-label">Storage/Interest</label>
+									<div class="input-group">
+										<span class="input-group-text">$</span>
+										<input type="number" class="form-control dec4" id="storage_interest" min="0" step=".01" placeholder="0.0000" autocomplete="off" />
+										<span class="input-group-text txt-sm">p/bu.</span>
+									</div>
+								</div>
+							</div>
+							<div class="col-3">
+								<div class="my-3">
 									<div class="sale_tip" data-bs-toggle="popover" data-bs-title="Quantity" data-bs-content="Enter the total # of bushels (ex: 15000).  This is NOT the total # of contracts.">
 										<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="12" y1="8" x2="12" y2="8"></line><line x1="12" y1="11" x2="12" y2="16"></line></svg>
 									</div>
@@ -186,6 +222,9 @@
 						<div class="row">
 							<div class="col hideByDefault" id="futures_price_elem">
 								<div class="my-3">
+									<div class="sale_tip futures-price-form-tip" id="futures_price_form_tip" data-bs-toggle="popover" data-bs-html="true" data-bs-title="Futures Price" data-bs-content="Price for the selected Futures Month.">
+										<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="12" y1="8" x2="12" y2="8"></line><line x1="12" y1="11" x2="12" y2="16"></line></svg>
+									</div>
 									<label for="futures_price" class="form-label">Futures Price<span class="required-asterisk required-asterisk-hidden" id="req_futures_price">*</span></label>
 									<div class="input-group">
 										<span class="input-group-text">$</span>
@@ -195,12 +234,11 @@
 									<div class="futures-price-notes">
 										<div class="sm_txt" id="futures_price_as_of"></div>
 									</div>
-									<small class="form-text text-muted d-block" id="futures_price_roll_detail" style="display:none;font-size:0.75rem;"></small>
 								</div>
 							</div>
 							<div class="col hideByDefault" id="carry_elem">
 								<div class="my-3 carry-with-orig-note">
-									<div class="sale_tip" data-bs-toggle="popover" data-bs-title="Carry" data-bs-content="Auto-sums the difference between the originating sale Futures Price and the Futures Price of the Futures Month you are rolling to.">
+									<div class="sale_tip carry-form-tip" id="carry_form_tip" data-bs-toggle="popover" data-bs-html="true" data-bs-title="Carry" data-bs-content="Auto-sums the difference between the originating sale Futures Price and the Futures Price of the Futures Month you are rolling to.">
 										<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="12" y1="8" x2="12" y2="8"></line><line x1="12" y1="11" x2="12" y2="16"></line></svg>
 									</div>
 									<label for="carry" class="form-label">Carry<span class="required-asterisk required-asterisk-hidden" id="req_carry">*</span></label>
@@ -208,7 +246,6 @@
 										<span class="input-group-text">$</span>
 										<input type="number" class="form-control dec4" id="carry" min="0" step=".01" placeholder="0.0000" autocomplete="off" />
 									</div>
-									<small class="form-text text-muted d-block" id="carry_roll_detail" style="display:none;font-size:0.75rem;"></small>
 								</div>
 							</div>
 							<div class="col hideByDefault" id="basis_price_elem">
@@ -232,12 +269,14 @@
 							</div>
 							<div class="col">
 								<div class="my-3">
+									<div class="sale_tip cash-price-form-tip" id="cash_price_form_tip" data-bs-toggle="popover" data-bs-html="true" data-bs-title="Cash Price Calculation" data-bs-trigger="click" tabindex="0" role="button" title="Show calculation">
+										<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="12" y1="8" x2="12" y2="8"></line><line x1="12" y1="11" x2="12" y2="16"></line></svg>
+									</div>
 									<label for="cash_price" class="form-label">Cash Price</label>
 									<div class="input-group">
 										<span class="input-group-text">$</span>
 										<input type="number" class="form-control dec4 uneditable-input" id="cash_price" min="0" step=".01" placeholder="0.0000" autocomplete="off" readonly />
 									</div>
-									<small class="form-text text-muted d-block" id="cash_price_hta_roll_detail" style="display:none;font-size:0.75rem;"></small>
 								</div>
 							</div>
 						</div>
@@ -394,6 +433,26 @@
 			<div class="modal-footer">
 				<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
 				<button type="button" class="btn btn-danger" id="confirmDeleteBtn">Delete</button>
+			</div>
+		</div>
+	</div>
+</div>
+
+<div class="modal fade" id="importPasteModal" tabindex="-1" aria-labelledby="importPasteModalLabel" aria-hidden="true">
+	<div class="modal-dialog">
+		<div class="modal-content">
+			<div class="modal-header">
+				<h2 class="modal-title fs-5" id="importPasteModalLabel">Import from paste</h2>
+				<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+			</div>
+			<div class="modal-body">
+				<p class="text-muted small">Paste exported JSON below, then click Import to replace current data.</p>
+				<textarea class="form-control font-monospace small" id="importPasteText" rows="10" placeholder='Paste JSON array or { "sales_ui_records": [...] }'></textarea>
+				<div class="invalid-feedback" id="importPasteError"></div>
+			</div>
+			<div class="modal-footer">
+				<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+				<button type="button" class="btn btn-primary" id="importPasteConfirmBtn">Import</button>
 			</div>
 		</div>
 	</div>
