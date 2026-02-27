@@ -1,5 +1,25 @@
 let sales_data = [];
 const salesStorageKey = 'sales_ui_records';
+const merchValueOptionsKey = 'sales_ui_merch_value_options';
+
+/** Merch Value display options: whether to deduct Service Fee and Storage/Interest from Merch Value. */
+let merchValueOptions = { deductServiceFees: true, deductStorageInterest: true };
+
+function loadMerchValueOptions() {
+	try {
+		const raw = localStorage.getItem(merchValueOptionsKey);
+		if (!raw) return;
+		const parsed = JSON.parse(raw);
+		if (parsed && typeof parsed.deductServiceFees === 'boolean') merchValueOptions.deductServiceFees = parsed.deductServiceFees;
+		if (parsed && typeof parsed.deductStorageInterest === 'boolean') merchValueOptions.deductStorageInterest = parsed.deductStorageInterest;
+	} catch (e) { /* ignore */ }
+}
+
+function saveMerchValueOptions() {
+	try {
+		localStorage.setItem(merchValueOptionsKey, JSON.stringify(merchValueOptions));
+	} catch (e) { console.error('Failed to save merch value options:', e); }
+}
 
 function loadSalesData() {
 	try {
@@ -902,6 +922,22 @@ const saveSale = async function(){
 }
 
 $(document).ready(function() {
+	loadMerchValueOptions();
+
+	function syncMerchValueOptionsCheckboxes() {
+		$('#optDeductServiceFees').prop('checked', merchValueOptions.deductServiceFees);
+		$('#optDeductStorageInterest').prop('checked', merchValueOptions.deductStorageInterest);
+	}
+
+	$('#merchValueOptionsModal').on('show.bs.modal', syncMerchValueOptionsCheckboxes);
+
+	$('#optDeductServiceFees, #optDeductStorageInterest').on('change', function() {
+		merchValueOptions.deductServiceFees = $('#optDeductServiceFees').prop('checked');
+		merchValueOptions.deductStorageInterest = $('#optDeductStorageInterest').prop('checked');
+		saveMerchValueOptions();
+		renderSalesTable();
+	});
+
 	populateDeliveryLocationOptions();
 
 	// Show delivery/location options on focus (prototype: avoid needing two clicks)
@@ -1621,7 +1657,7 @@ function checkSalesType(){
 		$basisPriceElem.removeClass('_show').removeClass('layout-spacer');
 		$deliveryMonthElem.removeClass('_show').removeClass('layout-spacer');
 		$deliveryLocationElem.removeClass('_show').removeClass('layout-spacer');
-		$('#hta_comp_initial_row').removeClass('_show');
+		$('#hta_comp_initial_row_separator, #hta_comp_initial_row').removeClass('_show');
 		$nearbyFuturesMonthElem.removeClass('_show').removeClass('layout-spacer');
 		$initialBasisPriceElem.removeClass('_show').removeClass('layout-spacer');
 		$carryElem.removeClass('_show').removeClass('layout-spacer');
@@ -1640,7 +1676,7 @@ function checkSalesType(){
 		// Show/hide elements based on sale type
 		if (saleType == 'HTA') {
 			$('#hta_contract_holder_elem').addClass('_show');
-			$('#hta_comp_initial_row').addClass('_show');
+			$('#hta_comp_initial_row_separator, #hta_comp_initial_row').addClass('_show');
 			$nearbyFuturesMonthElem.addClass('_show');
 			$initialBasisPriceElem.addClass('_show');
 			$futuresPriceElem.addClass('_show');
@@ -2180,17 +2216,21 @@ function buildMerchValueBreakdownHtml(saleId) {
 		// Merch Gain
 		const mg = formatMerchValueDriver(rec.merch_gain);
 		if (mg) drivers.push({ name: 'Merch Gain', ...mg });
-		// Storage/Interest (subtracted in calc, show as negative when present)
-		const si = rec.storage_interest != null && rec.storage_interest !== '' ? parseFloat(rec.storage_interest) : NaN;
-		if (!Number.isNaN(si) && si > 0) {
-			const siFmt = formatMerchValueDriver(-Math.abs(si));
-			if (siFmt) drivers.push({ name: 'Storage/Interest', ...siFmt });
+		// Storage/Interest (subtracted in calc when option enabled)
+		if (merchValueOptions.deductStorageInterest) {
+			const si = rec.storage_interest != null && rec.storage_interest !== '' ? parseFloat(rec.storage_interest) : NaN;
+			if (!Number.isNaN(si) && si > 0) {
+				const siFmt = formatMerchValueDriver(-Math.abs(si));
+				if (siFmt) drivers.push({ name: 'Storage/Interest', ...siFmt });
+			}
 		}
-		// Service Fee (subtracted in calc, show as negative when present)
-		const sf = rec.service_fee != null && rec.service_fee !== '' ? parseFloat(rec.service_fee) : NaN;
-		if (!Number.isNaN(sf)) {
-			const sfFmt = formatMerchValueDriver(-Math.abs(sf)); // fees subtract, show as negative
-			if (sfFmt) drivers.push({ name: 'Service Fee', ...sfFmt });
+		// Service Fee (subtracted in calc when option enabled)
+		if (merchValueOptions.deductServiceFees) {
+			const sf = rec.service_fee != null && rec.service_fee !== '' ? parseFloat(rec.service_fee) : NaN;
+			if (!Number.isNaN(sf)) {
+				const sfFmt = formatMerchValueDriver(-Math.abs(sf)); // fees subtract, show as negative
+				if (sfFmt) drivers.push({ name: 'Service Fee', ...sfFmt });
+			}
 		}
 		// Carry
 		const carry = formatMerchValueDriver(rec.carry);
@@ -2852,25 +2892,55 @@ function renderSalesTable() {
 			.reduce((sum, record) => sum + (parseInt(record.quantity || 0, 10) || 0), 0);
 		const remainingQuantity = getRemainingQuantity(originRecord);
 		const originQtyForMerch = parseInt(originRecord.quantity || 0, 10) || 0;
-		const merchValue = allChildRecords.reduce((sum, record) => {
-			const merchGain = parseFloat(record.merch_gain);
-			const carry = parseFloat(record.carry);
-			const serviceFee = parseFloat(record.service_fee);
-			let net = (Number.isNaN(merchGain) ? 0 : merchGain) + (Number.isNaN(carry) ? 0 : carry) - (Number.isNaN(serviceFee) ? 0 : serviceFee);
-			// Add (Set Basis - Initial Basis) for Set records when origin has Initial Basis Price
-			const isSet = record.status === 'Set' || record.status === 'Updated';
-			const originRec = getOriginRecord(record);
-			if (isSet && originRec && (originRec.initial_basis_price != null && originRec.initial_basis_price !== '')) {
-				const setBasis = parseFloat(record.basis_price);
-				const initBasis = parseFloat(originRec.initial_basis_price);
-				if (!Number.isNaN(setBasis) && !Number.isNaN(initBasis)) {
-					net += (setBasis - initBasis);
+		// Use same logic as buildMerchValueBreakdownHtml so table value matches breakdown total
+		const merchValue = (function () {
+			const origin = sales_data.find(s => s.id === sale.id);
+			if (!origin) return 0;
+			const children = sales_data.filter(r => r.parent_id === sale.id || r.id === sale.id);
+			const allRecords = [origin, ...children.filter(r => r.id !== origin.id)].sort((a, b) =>
+				moment(a.sale_date || 0) - moment(b.sale_date || 0)
+			);
+			const originQty = (origin.quantity != null && origin.quantity !== '') ? (parseInt(origin.quantity, 10) || 0) : 0;
+			const rows = [];
+			allRecords.forEach((rec) => {
+				const drivers = [];
+				const mg = formatMerchValueDriver(rec.merch_gain);
+				if (mg) drivers.push({ name: 'Merch Gain', ...mg });
+				if (merchValueOptions.deductStorageInterest) {
+					const si = rec.storage_interest != null && rec.storage_interest !== '' ? parseFloat(rec.storage_interest) : NaN;
+					if (!Number.isNaN(si) && si > 0) {
+						const siFmt = formatMerchValueDriver(-Math.abs(si));
+						if (siFmt) drivers.push({ name: 'Storage/Interest', ...siFmt });
+					}
 				}
-			}
-			const recQty = parseInt(record.quantity || 0, 10) || 0;
-			const weight = originQtyForMerch > 0 && recQty > 0 ? Math.min(1, recQty / originQtyForMerch) : 1;
-			return sum + (net * weight);
-		}, 0);
+				if (merchValueOptions.deductServiceFees) {
+					const sf = rec.service_fee != null && rec.service_fee !== '' ? parseFloat(rec.service_fee) : NaN;
+					if (!Number.isNaN(sf)) { const sfFmt = formatMerchValueDriver(-Math.abs(sf)); if (sfFmt) drivers.push({ name: 'Service Fee', ...sfFmt }); }
+				}
+				const carry = formatMerchValueDriver(rec.carry);
+				if (carry) drivers.push({ name: 'Carry', ...carry });
+				const originRec = getOriginRecord(rec);
+				const isSet = rec.status === 'Set' || rec.status === 'Updated';
+				const hasInitBasis = originRec && (originRec.initial_basis_price != null && originRec.initial_basis_price !== '');
+				if (isSet && hasInitBasis) {
+					const setBasis = rec.basis_price != null && rec.basis_price !== '' ? parseFloat(rec.basis_price) : NaN;
+					const initBasis = parseFloat(originRec.initial_basis_price);
+					if (!Number.isNaN(setBasis) && !Number.isNaN(initBasis)) {
+						const nb = formatMerchValueDriver(setBasis - initBasis);
+						if (nb) drivers.push({ name: 'Net Initial Basis', ...nb });
+					}
+				}
+				const recQty = (rec.quantity != null && rec.quantity !== '') ? (parseInt(rec.quantity, 10) || 0) : 0;
+				const weight = originQty > 0 && recQty > 0 ? recQty / originQty : 1;
+				const showPctBreakdown = originQty > 0 && recQty > 0 && recQty < originQty;
+				drivers.forEach(d => {
+					let adjustedVal = d.val;
+					if (showPctBreakdown && d.val != null && !Number.isNaN(d.val)) adjustedVal = d.val * weight;
+					rows.push({ adjustedVal });
+				});
+			});
+			return rows.reduce((sum, r) => sum + (r.adjustedVal != null && !Number.isNaN(r.adjustedVal) ? r.adjustedVal : 0), 0);
+		})();
 		
 		// Compute parent status per requirements
 		const originQty = parseInt(originRecord.quantity || 0, 10) || 0;

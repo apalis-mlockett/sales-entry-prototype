@@ -26,7 +26,8 @@
 		<div class="col">
 			<h1 class="page-title">Customer ABC / CORN 2025</h1>
 		</div>
-		<div class="col-auto">
+		<div class="col-auto d-flex align-items-center gap-2">
+			<button type="button" id="merchValueOptionsBtn" class="btn btn-outline-secondary" title="Merch Value options" aria-label="Merch Value options" data-bs-toggle="modal" data-bs-target="#merchValueOptionsModal" style="margin-right: 5px"><i class="fa-solid fa-gear"></i></button>
 			<button type="button" id="addSalesBtn" data-bs-toggle="modal" data-bs-target="#salesModal">Add Sale</button>
 		</div>
 	</div>
@@ -72,6 +73,27 @@
 		</div>
 	</footer>
 
+</div>
+
+<div class="modal fade" id="merchValueOptionsModal" tabindex="-1" aria-hidden="true" aria-labelledby="merchValueOptionsModalTitle">
+	<div class="modal-dialog modal-dialog-centered">
+		<div class="modal-content">
+			<div class="modal-header">
+				<h2 class="modal-title fs-5" id="merchValueOptionsModalTitle">Merch Value Options</h2>
+				<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+			</div>
+			<div class="modal-body">
+				<div class="form-check mb-2">
+					<input class="form-check-input" type="checkbox" id="optDeductServiceFees" />
+					<label class="form-check-label" for="optDeductServiceFees">Deduct Service Fees from Merch Value</label>
+				</div>
+				<div class="form-check">
+					<input class="form-check-input" type="checkbox" id="optDeductStorageInterest" />
+					<label class="form-check-label" for="optDeductStorageInterest">Deduct Storage/Interest from Merch Value</label>
+				</div>
+			</div>
+		</div>
+	</div>
 </div>
 
 <div class="modal fade" id="salesModal" tabindex="-1" aria-hidden="true">
@@ -132,6 +154,7 @@
 							</div>
 						</div>
 					</div>
+					<div class="_hr hideByDefault" id="hta_comp_initial_row_separator"></div>
 					<div class="row flex-nowrap hideByDefault" id="hta_comp_initial_row">
 						<div class="col-3" id="nearby_futures_month_elem">
 							<div class="dropdown calendar-dropdown my-3">

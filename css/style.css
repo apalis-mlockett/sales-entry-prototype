@@ -255,11 +255,25 @@ input.form-control::placeholder {
 	border-bottom:1px solid #3d4d60;
 	height:8px;
 }
-/* Separator line below every row in the sales modal form */
+/* Separator line below every row in the sales modal form (inset to match ._hr width) */
 #salesModal .modal-body .container > .row,
 #salesModal .modal-body .container .row {
-	border-bottom: 1px solid #3d4d60;
 	padding-bottom: 1rem;
+	position: relative;
+}
+#salesModal .modal-body .container > .row::after,
+#salesModal .modal-body .container .row::after {
+	content: '';
+	position: absolute;
+	left: calc(var(--bs-gutter-x, 0.75rem));
+	right: calc(var(--bs-gutter-x, 0.75rem));
+	bottom: 0;
+	border-bottom: 1px solid #3d4d60;
+}
+/* Avoid double line: no ::after on the row(s) that sit right above ._hr so only ._hr draws the line */
+#salesModal .modal-body .container > .row:first-child::after,
+#salesModal .modal-body .container > .row:has(+ #sales_form_elem)::after {
+	display: none;
 }
 #addSalesBtn {
 	margin-bottom:0;
