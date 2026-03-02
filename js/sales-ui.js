@@ -2202,7 +2202,7 @@ function buildMerchValueBreakdownHtml(saleId) {
 		moment(a.sale_date || 0) - moment(b.sale_date || 0)
 	);
 	// Positive-value drivers first (Merch Gain, Carry, Net Initial Basis), then negative (Storage/Interest, Service Fee)
-	const driverOrder = ['Merch Gain', 'Carry', 'Net Initial Basis', 'Storage/Interest', 'Service Fee'];
+	const driverOrder = ['Advisory Value', 'Carry', 'Net Initial Basis', 'Storage/Interest', 'Service Fee'];
 	const rows = [];
 	let totalMerchValue = 0;
 	allRecords.forEach((rec) => {
@@ -2213,9 +2213,9 @@ function buildMerchValueBreakdownHtml(saleId) {
 			: isTopLevel ? 'Created' : rec.status === 'Created' ? 'Created' : rec.status === 'Set' || rec.status === 'Updated' ? 'Set' : rec.status === 'Rolled' ? 'Roll' : 'Pending';
 		const dateStr = formatDate(rec.sale_date);
 		const drivers = [];
-		// Merch Gain
+		// Advisory Value (merch_gain)
 		const mg = formatMerchValueDriver(rec.merch_gain);
-		if (mg) drivers.push({ name: 'Merch Gain', ...mg });
+		if (mg) drivers.push({ name: 'Advisory Value', ...mg });
 		// Storage/Interest (subtracted in calc when option enabled)
 		if (merchValueOptions.deductStorageInterest) {
 			const si = rec.storage_interest != null && rec.storage_interest !== '' ? parseFloat(rec.storage_interest) : NaN;
@@ -2473,8 +2473,8 @@ const editSaleLedger = async function(id){
 	$('#sale_id').val(record.id);
 	$('#parent_id').val(record.parent_id || '');
 	
-	// Populate basic fields
-	$('#sale_type').val(record.sale_type);
+	// Populate basic fields (disable Sale Type on edit)
+	$('#sale_type').val(record.sale_type).prop('disabled', true);
 	$('#sale_date').val(record.sale_date);
 	$('#quantity').val(record.quantity != null && record.quantity !== '' ? formatSetQuantity(parseInt(record.quantity, 10)) : '');
 	$('#comments').val(record.comments || '');
@@ -2905,7 +2905,7 @@ function renderSalesTable() {
 			allRecords.forEach((rec) => {
 				const drivers = [];
 				const mg = formatMerchValueDriver(rec.merch_gain);
-				if (mg) drivers.push({ name: 'Merch Gain', ...mg });
+				if (mg) drivers.push({ name: 'Advisory Value', ...mg });
 				if (merchValueOptions.deductStorageInterest) {
 					const si = rec.storage_interest != null && rec.storage_interest !== '' ? parseFloat(rec.storage_interest) : NaN;
 					if (!Number.isNaN(si) && si > 0) {
@@ -3069,7 +3069,7 @@ function renderSalesTable() {
 				.append($('<th>').text('Pending (bu.)'))
 				.append($('<th>').text('Delivery Month'))
 				.append($('<th>').text('Futures Price'))
-				.append($('<th>').text('Merch Gain'))
+				.append($('<th>').text('Advisory Value'))
 				.append($('<th>').text('Carry'))
 				.append($('<th>').text('Basis Price'))
 				.append($('<th>').text('Storage/Interest'))
